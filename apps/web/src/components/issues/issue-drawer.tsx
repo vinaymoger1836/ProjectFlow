@@ -105,6 +105,13 @@ export function IssueDrawer({ issueIdentifier, onClose }: IssueDrawerProps) {
     enabled: !!issue?.id && activeDiscussionTab === 'activity',
   });
 
+  // Fetch project members for assignee selection
+  const { data: projectMembers = [] } = useQuery({
+    queryKey: ['project-members', issue?.projectId],
+    queryFn: () => (issue?.projectId ? api.listProjectMembers(issue.projectId) : []),
+    enabled: !!issue?.projectId,
+  });
+
   // Sync title and description state on load
   useEffect(() => {
     if (issue) {
@@ -469,7 +476,7 @@ export function IssueDrawer({ issueIdentifier, onClose }: IssueDrawerProps) {
             )}
 
             {/* Quick Properties Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-lg bg-muted/40 border border-border/80">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 p-4 rounded-lg bg-muted/40 border border-border/80">
               {/* Status Selector */}
               <div className="space-y-1">
                 <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -520,6 +527,31 @@ export function IssueDrawer({ issueIdentifier, onClose }: IssueDrawerProps) {
                     <option value="P2">P2 - Medium</option>
                     <option value="P3">P3 - Low</option>
                     <option value="P4">P4 - None</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Assignee Selector */}
+              <div className="space-y-1">
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Assignee
+                </span>
+                <div>
+                  <select
+                    value={issue.assignee?.id || ''}
+                    onChange={(e) =>
+                      updateMutation.mutate({
+                        assigneeId: e.target.value ? e.target.value : null,
+                      })
+                    }
+                    className="w-full text-xs font-medium bg-background border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer truncate"
+                  >
+                    <option value="">Unassigned</option>
+                    {projectMembers.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

@@ -138,6 +138,17 @@ export const api = {
     });
   },
 
+  // Project Members
+  listProjectMembers: async (projectId: string): Promise<{
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl?: string | null;
+    role: string;
+  }[]> => {
+    return request(`/projects/${projectId}/members`);
+  },
+
   // Comments
   listComments: async (issueId: string): Promise<IssueCommentItem[]> => {
     return request<IssueCommentItem[]>(`/issues/${issueId}/comments`);
