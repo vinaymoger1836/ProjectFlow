@@ -12,13 +12,16 @@
     "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
-    "strictNullChecks": false,
+    "strictNullChecks": true,
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@projectflow/database": ["../../packages/database/src/index.ts"],
+      "@projectflow/database/schema": ["../../packages/database/src/schema/index.ts"],
+      "@projectflow/types": ["../../packages/types/src/index.ts"]
     }
   }
 }
