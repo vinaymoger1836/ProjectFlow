@@ -134,6 +134,18 @@ export const api = {
     });
   },
 
+  // Subtasks
+  listSubtasks: async (issueId: string) => {
+    return request<any[]>(`/issues/${issueId}/subtasks`);
+  },
+
+  createSubtask: async (issueId: string, payload: { title: string; priority?: string; estimateHours?: number; assigneeId?: string }) => {
+    return request<any>(`/issues/${issueId}/subtasks`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   // AI Workflows
   parseIssueWithAi: async (projectId: string, prompt: string): Promise<ParsedIssueDraft> => {
     return request<ParsedIssueDraft>('/ai/parse-issue', {
@@ -146,6 +158,18 @@ export const api = {
     return request<PaginatedIssues['items'][0]>('/ai/execute-tool', {
       method: 'POST',
       body: JSON.stringify({ tool, projectId, payload }),
+    });
+  },
+
+  suggestSubtasks: async (issueId: string): Promise<{ subtasks: { title: string; priority: string; estimateHours: number }[]; explanation: string; modelUsed: string }> => {
+    return request(`/ai/issues/${issueId}/suggest-subtasks`, {
+      method: 'POST',
+    });
+  },
+
+  summarizeThread: async (issueId: string): Promise<{ summary: string; decisions: string[]; nextSteps: string[]; modelUsed: string }> => {
+    return request(`/ai/issues/${issueId}/summarize`, {
+      method: 'POST',
     });
   },
 };

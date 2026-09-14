@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Body,
+  Param,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -44,6 +45,36 @@ export class AiController {
     @Body() dto: ExecuteAiToolDto,
   ) {
     const result = await this.aiService.executeTool(user.id, dto);
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Post('issues/:issueId/suggest-subtasks')
+  @ApiOperation({
+    summary: 'Analyze parent issue and suggest 3-5 structured subtasks for quick creation',
+  })
+  async suggestSubtasks(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('issueId') issueId: string,
+  ) {
+    const result = await this.aiService.suggestSubtasks(user.id, issueId);
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Post('issues/:issueId/summarize')
+  @ApiOperation({
+    summary: 'Summarize issue comment thread and discussion into key decisions and next steps',
+  })
+  async summarizeThread(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('issueId') issueId: string,
+  ) {
+    const result = await this.aiService.summarizeThread(user.id, issueId);
     return {
       success: true,
       data: result,

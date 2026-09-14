@@ -6,6 +6,7 @@ import { OrganizationsModule } from './modules/organizations/organizations.modul
 import { ProjectsModule } from './modules/projects/projects.module';
 import { IssuesModule } from './modules/issues/issues.module';
 import { AiModule } from './modules/ai/ai.module';
+import { EventsModule } from './modules/events/events.module';
 import { HealthController } from './modules/health/health.controller';
 
 @Module({
@@ -20,6 +21,7 @@ import { HealthController } from './modules/health/health.controller';
     ProjectsModule,
     IssuesModule,
     AiModule,
+    EventsModule,
   ],
   controllers: [HealthController],
   providers: [],

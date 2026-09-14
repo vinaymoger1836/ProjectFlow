@@ -128,4 +128,33 @@ export class IssuesController {
       data: comment,
     };
   }
+
+  @Get('issues/:issueId/subtasks')
+  @ApiOperation({ summary: 'List all child subtasks for an issue' })
+  @ApiParam({ name: 'issueId', description: 'Parent Issue UUID' })
+  async listSubtasks(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('issueId', ParseUUIDPipe) issueId: string,
+  ) {
+    const subtasks = await this.issuesService.listSubtasks(user.id, issueId);
+    return {
+      success: true,
+      data: subtasks,
+    };
+  }
+
+  @Post('issues/:issueId/subtasks')
+  @ApiOperation({ summary: 'Create a child subtask under a parent issue' })
+  @ApiParam({ name: 'issueId', description: 'Parent Issue UUID' })
+  async createSubtask(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('issueId', ParseUUIDPipe) issueId: string,
+    @Body() dto: any,
+  ) {
+    const subtask = await this.issuesService.createSubtask(user.id, issueId, dto);
+    return {
+      success: true,
+      data: subtask,
+    };
+  }
 }

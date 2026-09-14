@@ -365,4 +365,204 @@ Rules:
 
     return project;
   }
+
+  /**
+   * AI-Assisted Subtask Breakdown: analyzes parent issue and returns 3-5 structured subtasks.
+   */
+  async suggestSubtasks(userId: string, issueId: string) {
+    const issue = await this.issuesService.getIssue(userId, issueId);
+
+    const groqKey = this.configService.get<string>('GROQ_API_KEY');
+    const geminiKey = this.configService.get<string>('GEMINI_API_KEY');
+    const openaiKey = this.configService.get<string>('OPENAI_API_KEY');
+
+    const prompt = `Issue Title: "${issue.title}"
+Issue Type: ${issue.type}
+Priority: ${issue.priority}
+Description: ${issue.description || 'No description provided'}`;
+
+    const systemPrompt = `You are an expert Agile engineering lead. Break down the given issue into 3 to 5 clear, logical, actionable subtasks.
+Respond ONLY with a JSON object without markdown fences, matching this exact schema:
+{
+  "subtasks": [
+    {
+      "title": "Action-oriented subtask title (under 80 chars)",
+      "priority": "P0" | "P1" | "P2" | "P3",
+      "estimateHours": number
+    }
+  ],
+  "explanation": "1-sentence summary of the breakdown strategy"
+}`;
+
+    if (groqKey || geminiKey || openaiKey) {
+      try {
+        const apiKey = groqKey || geminiKey || openaiKey!;
+        const baseUrl = groqKey
+          ? 'https://api.groq.com/openai/v1'
+          : geminiKey
+          ? 'https://generativelanguage.googleapis.com/v1beta/openai'
+          : 'https://api.openai.com/v1';
+        const model = groqKey
+          ? this.configService.get<string>('GROQ_MODEL', 'llama-3.3-70b-versatile')
+          : geminiKey
+          ? this.configService.get<string>('GEMINI_MODEL', 'gemini-2.0-flash')
+          : 'gpt-4o-mini';
+
+        const res = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: prompt },
+            ],
+            temperature: 0.2,
+            response_format: { type: 'json_object' },
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const content = data.choices?.[0]?.message?.content;
+          if (content) {
+            const parsed = JSON.parse(content.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim());
+            return {
+              subtasks: (parsed.subtasks || []).map((s: any) => ({
+                title: String(s.title || 'Untitled Subtask'),
+                priority: this.sanitizePriority(s.priority),
+                estimateHours: typeof s.estimateHours === 'number' ? s.estimateHours : 2,
+              })),
+              explanation: parsed.explanation || 'Subtasks generated based on issue scope.',
+              modelUsed: model,
+            };
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`AI subtask breakdown API failed (${err.message}). Using heuristic.`);
+      }
+    }
+
+    // Heuristic Subtask Generator fallback
+    const subtasks = [
+      {
+        title: `Design and document architecture for ${issue.title.slice(0, 45)}`,
+        priority: issue.priority,
+        estimateHours: 2,
+      },
+      {
+        title: `Implement core logic and API changes`,
+        priority: issue.priority,
+        estimateHours: Math.max(2, Math.round((issue.estimateHours || 6) * 0.5)),
+      },
+      {
+        title: `Write automated integration & unit tests`,
+        priority: 'P2',
+        estimateHours: 2,
+      },
+      {
+        title: `Review PR, verify deployment and telemetry`,
+        priority: 'P3',
+        estimateHours: 1,
+      },
+    ];
+
+    return {
+      subtasks,
+      explanation: 'Generated standard engineering implementation subtasks.',
+      modelUsed: 'heuristic-generator',
+    };
+  }
+
+  /**
+   * AI-Assisted Thread Summarization: summarizes issue discussion into key decisions and next steps.
+   */
+  async summarizeThread(userId: string, issueId: string) {
+    const issue = await this.issuesService.getIssue(userId, issueId);
+    const comments = await this.issuesService.listComments(userId, issueId);
+
+    if (comments.length === 0) {
+      return {
+        summary: 'No comments have been posted to this issue yet.',
+        decisions: [],
+        nextSteps: ['Add initial technical context or discussion in comments.'],
+        modelUsed: 'deterministic',
+      };
+    }
+
+    const conversation = comments
+      .map((c: any) => `${c.author?.name || 'User'}: ${c.content}`)
+      .join('\n');
+
+    const groqKey = this.configService.get<string>('GROQ_API_KEY');
+    const geminiKey = this.configService.get<string>('GEMINI_API_KEY');
+    const openaiKey = this.configService.get<string>('OPENAI_API_KEY');
+
+    const systemPrompt = `You are ProjectFlow's Executive Discussion Summarizer.
+Analyze this issue and discussion thread. Produce a crisp executive summary in JSON:
+{
+  "summary": "2-3 sentence overview of the discussion and current status",
+  "decisions": ["Key decision 1", "Key decision 2"],
+  "nextSteps": ["Actionable next step 1", "Actionable next step 2"]
+}`;
+
+    if (groqKey || geminiKey || openaiKey) {
+      try {
+        const apiKey = groqKey || geminiKey || openaiKey!;
+        const baseUrl = groqKey
+          ? 'https://api.groq.com/openai/v1'
+          : geminiKey
+          ? 'https://generativelanguage.googleapis.com/v1beta/openai'
+          : 'https://api.openai.com/v1';
+        const model = groqKey
+          ? this.configService.get<string>('GROQ_MODEL', 'llama-3.3-70b-versatile')
+          : geminiKey
+          ? this.configService.get<string>('GEMINI_MODEL', 'gemini-2.0-flash')
+          : 'gpt-4o-mini';
+
+        const res = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: `Issue: ${issue.title}\n\nDiscussion:\n${conversation}` },
+            ],
+            temperature: 0.2,
+            response_format: { type: 'json_object' },
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const content = data.choices?.[0]?.message?.content;
+          if (content) {
+            const parsed = JSON.parse(content.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim());
+            return {
+              summary: parsed.summary || 'Summary unavailable',
+              decisions: parsed.decisions || [],
+              nextSteps: parsed.nextSteps || [],
+              modelUsed: model,
+            };
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`AI thread summarization failed (${err.message}). Using heuristic.`);
+      }
+    }
+
+    return {
+      summary: `Discussion includes ${comments.length} comment(s) from team members regarding implementation and verification.`,
+      decisions: ['Work is actively tracking towards milestone criteria.'],
+      nextSteps: ['Follow up with assignee on final test verification.'],
+      modelUsed: 'heuristic-summarizer',
+    };
+  }
 }

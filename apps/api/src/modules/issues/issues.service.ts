@@ -16,6 +16,7 @@ import {
   labels,
   issueLabels,
   issueComments,
+  issueAttachments,
   activities,
 } from '@projectflow/database';
 import { DRIZZLE_DB } from '../database/database.module';
@@ -23,14 +24,25 @@ import { CreateIssueDto } from './dto/create-issue.dto';
 import { UpdateIssueDto } from './dto/update-issue.dto';
 import { IssueQueryDto } from './dto/issue-query.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
+import { CreateSubtaskDto } from './dto/create-subtask.dto';
+import { CreateAttachmentDto } from './dto/create-attachment.dto';
 
 const assigneeUser = aliasedTable(users, 'assignee_user');
 const reporterUser = aliasedTable(users, 'reporter_user');
+const activityUser = aliasedTable(users, 'activity_user');
+const attachmentUploader = aliasedTable(users, 'attachment_uploader');
+import { Optional } from '@nestjs/common';
+import { EventsGateway } from '../events/events.gateway';
+
 const commentAuthor = aliasedTable(users, 'comment_author');
+
 
 @Injectable()
 export class IssuesService {
-  constructor(@Inject(DRIZZLE_DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE_DB) private readonly db: Database,
+    @Optional() private readonly eventsGateway?: EventsGateway,
+  ) {}
 
   /**
    * Creates a new issue with atomic sequential key numbering per project (e.g. PAY-1, PAY-2).
@@ -39,7 +51,7 @@ export class IssuesService {
   async createIssue(userId: string, projectId: string, dto: CreateIssueDto) {
     const project = await this.getProjectAndVerifyAccess(userId, projectId);
 
-    return await this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       // 1. Atomically increment project issueCounter to prevent sequence race conditions
       const [updatedProject] = await tx
         .update(projects)
@@ -108,6 +120,9 @@ export class IssuesService {
 
       return await this.getIssueDetailsById(createdIssue.id, tx);
     });
+
+    this.eventsGateway?.broadcastIssueCreated(projectId, result);
+    return result;
   }
 
   /**
@@ -349,7 +364,7 @@ export class IssuesService {
 
     const project = await this.getProjectAndVerifyAccess(userId, existing.projectId);
 
-    return await this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       const updates: Partial<typeof issues.$inferInsert> = {
         updatedAt: new Date(),
       };
@@ -412,6 +427,9 @@ export class IssuesService {
 
       return await this.getIssueDetailsById(issueId, tx);
     });
+
+    this.eventsGateway?.broadcastIssueUpdated(existing.projectId, result);
+    return result;
   }
 
   /**
@@ -506,10 +524,13 @@ export class IssuesService {
       .where(eq(users.id, userId))
       .limit(1);
 
-    return {
+    const commentResult = {
       ...comment,
       author,
     };
+
+    this.eventsGateway?.broadcastCommentAdded(issue.projectId, issueId, commentResult);
+    return commentResult;
   }
 
   /**
@@ -615,6 +636,26 @@ export class IssuesService {
       .from(issueComments)
       .where(eq(issueComments.issueId, issueId));
 
+    // Fetch child subtasks
+    const subtaskRows = await executor
+      .select({
+        id: issues.id,
+        issueKey: issues.issueKey,
+        keyNumber: issues.keyNumber,
+        title: issues.title,
+        status: issues.status,
+        priority: issues.priority,
+        estimateHours: issues.estimateHours,
+        assigneeId: assigneeUser.id,
+        assigneeName: assigneeUser.name,
+        assigneeEmail: assigneeUser.email,
+        assigneeAvatarUrl: assigneeUser.avatarUrl,
+      })
+      .from(issues)
+      .leftJoin(assigneeUser, eq(issues.assigneeId, assigneeUser.id))
+      .where(and(eq(issues.parentIssueId, issueId), eq(issues.isArchived, false)))
+      .orderBy(asc(issues.keyNumber));
+
     const {
       assigneeId,
       assigneeName,
@@ -645,6 +686,184 @@ export class IssuesService {
       },
       labels: issueLabelRows,
       commentCount: parseInt(commentCount?.count || '0', 10),
+      subtasks: subtaskRows,
+      subtaskStats: {
+        total: subtaskRows.length,
+        completed: subtaskRows.filter((s: any) => s.status === 'DONE').length,
+      },
+    };
+  }
+
+  /**
+   * Lists all child subtasks for an issue in chronological/key order.
+   */
+  async listSubtasks(userId: string, issueId: string) {
+    const [parent] = await this.db
+      .select({ id: issues.id, projectId: issues.projectId })
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .limit(1);
+
+    if (!parent) {
+      throw new NotFoundException(`Issue with ID '${issueId}' not found.`);
+    }
+
+    await this.getProjectAndVerifyAccess(userId, parent.projectId);
+
+    return await this.db
+      .select({
+        id: issues.id,
+        issueKey: issues.issueKey,
+        keyNumber: issues.keyNumber,
+        title: issues.title,
+        status: issues.status,
+        priority: issues.priority,
+        estimateHours: issues.estimateHours,
+        createdAt: issues.createdAt,
+        assigneeId: assigneeUser.id,
+        assigneeName: assigneeUser.name,
+        assigneeEmail: assigneeUser.email,
+        assigneeAvatarUrl: assigneeUser.avatarUrl,
+      })
+      .from(issues)
+      .leftJoin(assigneeUser, eq(issues.assigneeId, assigneeUser.id))
+      .where(and(eq(issues.parentIssueId, issueId), eq(issues.isArchived, false)))
+      .orderBy(asc(issues.keyNumber));
+  }
+
+  /**
+   * Creates a child subtask under a parent issue.
+   */
+  async createSubtask(userId: string, parentIssueId: string, dto: CreateSubtaskDto) {
+    const [parent] = await this.db
+      .select({ id: issues.id, projectId: issues.projectId })
+      .from(issues)
+      .where(eq(issues.id, parentIssueId))
+      .limit(1);
+
+    if (!parent) {
+      throw new NotFoundException(`Parent issue with ID '${parentIssueId}' not found.`);
+    }
+
+    return await this.createIssue(userId, parent.projectId, {
+      title: dto.title,
+      type: 'SUBTASK',
+      priority: dto.priority || 'P2',
+      status: 'TODO',
+      estimateHours: dto.estimateHours,
+      assigneeId: dto.assigneeId,
+      parentIssueId: parentIssueId,
+    });
+  }
+
+  /**
+   * Lists all activity history logs for an issue in reverse chronological order.
+   */
+  async listActivities(userId: string, issueId: string) {
+    const issue = await this.getIssue(userId, issueId);
+
+    const rows = await this.db
+      .select({
+        id: activities.id,
+        action: activities.action,
+        entityType: activities.entityType,
+        entityId: activities.entityId,
+        details: activities.details,
+        createdAt: activities.createdAt,
+        user: {
+          id: activityUser.id,
+          name: activityUser.name,
+          email: activityUser.email,
+          avatarUrl: activityUser.avatarUrl,
+        },
+      })
+      .from(activities)
+      .leftJoin(activityUser, eq(activities.userId, activityUser.id))
+      .where(and(eq(activities.entityType, 'ISSUE'), eq(activities.entityId, issue.id)))
+      .orderBy(desc(activities.createdAt));
+
+    return rows;
+  }
+
+  /**
+   * Lists all attachments uploaded for an issue.
+   */
+  async listAttachments(userId: string, issueId: string) {
+    const issue = await this.getIssue(userId, issueId);
+
+    const rows = await this.db
+      .select({
+        id: issueAttachments.id,
+        issueId: issueAttachments.issueId,
+        fileName: issueAttachments.fileName,
+        fileSize: issueAttachments.fileSize,
+        mimeType: issueAttachments.mimeType,
+        s3Key: issueAttachments.s3Key,
+        s3Url: issueAttachments.s3Url,
+        createdAt: issueAttachments.createdAt,
+        uploader: {
+          id: attachmentUploader.id,
+          name: attachmentUploader.name,
+          email: attachmentUploader.email,
+          avatarUrl: attachmentUploader.avatarUrl,
+        },
+      })
+      .from(issueAttachments)
+      .leftJoin(attachmentUploader, eq(issueAttachments.uploaderId, attachmentUploader.id))
+      .where(eq(issueAttachments.issueId, issue.id))
+      .orderBy(desc(issueAttachments.createdAt));
+
+    return rows;
+  }
+
+  /**
+   * Records a new file attachment for an issue and logs an activity event.
+   */
+  async addAttachment(userId: string, issueId: string, dto: CreateAttachmentDto) {
+    const issue = await this.getIssue(userId, issueId);
+    const project = await this.getProjectAndVerifyAccess(userId, issue.projectId);
+
+    const [attachment] = await this.db
+      .insert(issueAttachments)
+      .values({
+        issueId: issue.id,
+        uploaderId: userId,
+        fileName: dto.fileName,
+        fileSize: dto.fileSize,
+        mimeType: dto.mimeType,
+        s3Key: dto.s3Key,
+        s3Url: dto.s3Url,
+      })
+      .returning();
+
+    await this.db.insert(activities).values({
+      organizationId: project.organizationId,
+      projectId: issue.projectId,
+      userId,
+      entityType: 'ISSUE',
+      entityId: issue.id,
+      action: 'ATTACHMENT_ADDED',
+      details: {
+        attachmentId: attachment.id,
+        fileName: dto.fileName,
+        fileSize: dto.fileSize,
+      },
+    });
+
+    const [uploader] = await this.db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        avatarUrl: users.avatarUrl,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    return {
+      ...attachment,
+      uploader,
     };
   }
 
