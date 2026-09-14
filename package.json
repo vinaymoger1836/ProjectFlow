@@ -1,0 +1,21 @@
+{
+  "name": "projectflow",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "db:generate": "pnpm --filter @projectflow/database generate",
+    "db:migrate": "pnpm --filter @projectflow/database migrate",
+    "db:push": "pnpm --filter @projectflow/database push",
+    "db:studio": "pnpm --filter @projectflow/database studio"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3",
+    "turbo": "^2.4.4",
+    "typescript": "^5.8.2"
+  },
+  "packageManager": "pnpm@11.18.0"
+}

@@ -1,0 +1,10 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  '@scarf/scarf': false
+  esbuild: true
+fetchRetries: 5
+fetchRetryMaxtimeout: 600000
+fetchTimeout: 600000
+networkConcurrency: 3
