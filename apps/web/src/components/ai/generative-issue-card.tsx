@@ -96,6 +96,15 @@ export function GenerativeIssueCard({
         </span>
       </div>
 
+      {/* Target Project Indicator */}
+      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/20 px-2.5 py-1 rounded border border-border/30">
+        <span>Project:</span>
+        <span className="font-bold text-foreground font-mono bg-primary/15 text-primary px-1.5 py-0.5 rounded text-[10px]">
+          PAY
+        </span>
+        <span className="truncate font-medium text-foreground">Payment Integration Platform</span>
+      </div>
+
       {/* Explanation Banner */}
       {draft.explanation && (
         <p className="text-[11px] text-muted-foreground italic bg-muted/30 px-2.5 py-1.5 rounded border border-border/40">

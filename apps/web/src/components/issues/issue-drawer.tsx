@@ -19,7 +19,6 @@ import {
 import { api, IssueCommentItem } from '@/lib/api';
 import { IssueTypeBadge, IssuePriorityBadge, IssueStatusBadge } from './badge-helpers';
 import { IssuePriority, IssueType } from '@projectflow/types';
-import { DEMO_ISSUES } from './issues-view';
 
 interface IssueDrawerProps {
   issueIdentifier: string | null;
@@ -42,22 +41,7 @@ export function IssueDrawer({ issueIdentifier, onClose }: IssueDrawerProps) {
     isError,
   } = useQuery({
     queryKey: ['issue', issueIdentifier],
-    queryFn: async () => {
-      if (!issueIdentifier) return null;
-      try {
-        return await api.getIssue(issueIdentifier);
-      } catch (err) {
-        const fallback = DEMO_ISSUES.find(
-          (i) =>
-            i.id === issueIdentifier ||
-            i.issueKey.toUpperCase() === issueIdentifier.toUpperCase(),
-        );
-        if (fallback) {
-          return { ...fallback, commentCount: 0 };
-        }
-        throw err;
-      }
-    },
+    queryFn: () => (issueIdentifier ? api.getIssue(issueIdentifier) : null),
     enabled: !!issueIdentifier,
   });
 
