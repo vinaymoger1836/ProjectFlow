@@ -11,5 +11,5 @@ export default defineConfig({
     url: process.env.DIRECT_URL || process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/projectflow',
   },
   verbose: true,
-  strict: true,
+  strict: false,
 });
