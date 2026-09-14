@@ -9,12 +9,23 @@ build
 out
 .turbo
 
-# Environment variables
+# Environment & Sensitive Credentials (Zero Leakage)
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+*credential*
+*secret*
+serviceAccountKey*.json
+
+# Project Plans & Agent Rules (Untracked per user instructions)
+GEMINI.md
+AGENTS.md
+Architecture_Plan.md
+PROJECT_PLAN.md
 
 # Logs
 npm-debug.log*
