@@ -7,10 +7,12 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import {
   Database,
   projects,
+  users,
+  issues,
   userRoles,
   aiAuditTrail,
 } from '@projectflow/database';
@@ -565,4 +567,159 @@ Analyze this issue and discussion thread. Produce a crisp executive summary in J
       modelUsed: 'heuristic-summarizer',
     };
   }
+
+  /**
+   * AI-Assisted Triage: analyzes issue context and team workload to suggest optimal priority and assignee.
+   */
+  async suggestTriage(userId: string, issueId: string) {
+    const issue = await this.issuesService.getIssue(userId, issueId);
+
+    // Fetch project to get organizationId
+    const [project] = await this.db
+      .select({ id: projects.id, organizationId: projects.organizationId })
+      .from(projects)
+      .where(eq(projects.id, issue.projectId))
+      .limit(1);
+
+    // Fetch team members in organization
+    const teamMembers = await this.db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: userRoles.role,
+      })
+      .from(userRoles)
+      .innerJoin(users, eq(userRoles.userId, users.id))
+      .where(eq(userRoles.organizationId, project.organizationId));
+
+    // Fetch active workload (open issues) per team member in this project
+    const openIssues = await this.db
+      .select({
+        assigneeId: issues.assigneeId,
+      })
+      .from(issues)
+      .where(
+        and(
+          eq(issues.projectId, issue.projectId),
+          eq(issues.isArchived, false),
+          sql`${issues.status} NOT IN ('DONE', 'CANCELLED')`,
+        ),
+      );
+
+    const workloadMap = new Map<string, number>();
+    for (const member of teamMembers) {
+      workloadMap.set(member.id, 0);
+    }
+    for (const row of openIssues) {
+      if (row.assigneeId && workloadMap.has(row.assigneeId)) {
+        workloadMap.set(row.assigneeId, (workloadMap.get(row.assigneeId) || 0) + 1);
+      }
+    }
+
+    const candidateSummary = teamMembers.map((m) => ({
+      id: m.id,
+      name: m.name,
+      role: m.role,
+      activeIssues: workloadMap.get(m.id) || 0,
+    }));
+
+    const groqKey = this.configService.get<string>('GROQ_API_KEY');
+    const geminiKey = this.configService.get<string>('GEMINI_API_KEY');
+    const openaiKey = this.configService.get<string>('OPENAI_API_KEY');
+
+    const systemPrompt = `You are ProjectFlow's Smart Triage AI.
+Analyze this issue and team workload. Suggest the most appropriate priority (P0, P1, P2, P3, P4) and the best candidate assignee.
+Respond in strict JSON:
+{
+  "suggestedPriority": "P0" | "P1" | "P2" | "P3" | "P4",
+  "priorityReason": "Brief explanation for priority",
+  "suggestedAssigneeId": "UUID of candidate",
+  "suggestedAssigneeName": "Name of candidate",
+  "assigneeReason": "Brief explanation why this member is optimal (balancing workload & role)"
+}`;
+
+    if (groqKey || geminiKey || openaiKey) {
+      try {
+        const apiKey = groqKey || geminiKey || openaiKey!;
+        const baseUrl = groqKey
+          ? 'https://api.groq.com/openai/v1'
+          : geminiKey
+          ? 'https://generativelanguage.googleapis.com/v1beta/openai'
+          : 'https://api.openai.com/v1';
+        const model = groqKey
+          ? this.configService.get<string>('GROQ_MODEL', 'llama-3.3-70b-versatile')
+          : geminiKey
+          ? this.configService.get<string>('GEMINI_MODEL', 'gemini-2.0-flash')
+          : 'gpt-4o-mini';
+
+        const userContent = `Issue Title: ${issue.title}
+Issue Description: ${issue.description || 'No description'}
+Current Type: ${issue.type}
+Current Priority: ${issue.priority}
+
+Available Team Members & Workloads:
+${JSON.stringify(candidateSummary, null, 2)}`;
+
+        const res = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userContent },
+            ],
+            temperature: 0.2,
+            response_format: { type: 'json_object' },
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const content = data.choices?.[0]?.message?.content;
+          if (content) {
+            const parsed = JSON.parse(content.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim());
+            return {
+              suggestedPriority: this.sanitizePriority(parsed.suggestedPriority),
+              priorityReason: parsed.priorityReason || 'Based on issue scope and urgency.',
+              suggestedAssigneeId: parsed.suggestedAssigneeId || candidateSummary[0]?.id || null,
+              suggestedAssigneeName: parsed.suggestedAssigneeName || candidateSummary[0]?.name || 'Unassigned',
+              assigneeReason: parsed.assigneeReason || 'Optimal workload match.',
+              modelUsed: model,
+            };
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`AI triage suggestion API failed (${err.message}). Using heuristic.`);
+      }
+    }
+
+    // Heuristic fallback: pick member with lowest workload
+    const sortedCandidates = [...candidateSummary].sort((a, b) => a.activeIssues - b.activeIssues);
+    const chosen = sortedCandidates[0] || { id: userId, name: 'Current User', activeIssues: 0 };
+
+    let heuristicPriority: IssuePriority = 'P2';
+    const lower = (issue.title + ' ' + (issue.description || '')).toLowerCase();
+    if (lower.includes('crash') || lower.includes('outage') || lower.includes('urgent') || lower.includes('security')) {
+      heuristicPriority = 'P0';
+    } else if (lower.includes('bug') || lower.includes('error') || lower.includes('fail')) {
+      heuristicPriority = 'P1';
+    } else if (lower.includes('minor') || lower.includes('typo') || lower.includes('cleanup')) {
+      heuristicPriority = 'P3';
+    }
+
+    return {
+      suggestedPriority: heuristicPriority,
+      priorityReason: `Assigned based on keyword pattern heuristics in title and description.`,
+      suggestedAssigneeId: chosen.id,
+      suggestedAssigneeName: chosen.name,
+      assigneeReason: `Recommended due to lowest active workload (${chosen.activeIssues} open tasks).`,
+      modelUsed: 'heuristic-triage',
+    };
+  }
 }
+

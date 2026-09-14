@@ -157,4 +157,48 @@ export class IssuesController {
       data: subtask,
     };
   }
+
+  @Get('issues/:issueId/activity')
+  @ApiOperation({ summary: 'List activity audit trail for an issue' })
+  @ApiParam({ name: 'issueId', description: 'Issue UUID' })
+  async listActivities(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('issueId', ParseUUIDPipe) issueId: string,
+  ) {
+    const activities = await this.issuesService.listActivities(user.id, issueId);
+    return {
+      success: true,
+      data: activities,
+    };
+  }
+
+  @Get('issues/:issueId/attachments')
+  @ApiOperation({ summary: 'List all attachments uploaded to an issue' })
+  @ApiParam({ name: 'issueId', description: 'Issue UUID' })
+  async listAttachments(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('issueId', ParseUUIDPipe) issueId: string,
+  ) {
+    const attachments = await this.issuesService.listAttachments(user.id, issueId);
+    return {
+      success: true,
+      data: attachments,
+    };
+  }
+
+  @Post('issues/:issueId/attachments')
+  @ApiOperation({ summary: 'Upload / attach a file reference to an issue' })
+  @ApiParam({ name: 'issueId', description: 'Issue UUID' })
+  async addAttachment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('issueId', ParseUUIDPipe) issueId: string,
+    @Body() dto: any,
+  ) {
+    const attachment = await this.issuesService.addAttachment(user.id, issueId, dto);
+    return {
+      success: true,
+      data: attachment,
+    };
+  }
 }
+
