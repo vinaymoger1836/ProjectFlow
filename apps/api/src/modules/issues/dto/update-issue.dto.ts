@@ -2,7 +2,6 @@ import {
   IsString,
   MaxLength,
   IsOptional,
-  IsUUID,
   IsIn,
   IsInt,
   Min,
@@ -14,6 +13,7 @@ import {
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IssueType, IssuePriority } from '@projectflow/types';
 import { ISSUE_TYPES, ISSUE_PRIORITIES } from './create-issue.dto';
+import { IsEntityId } from '../../../common/validators/is-entity-id.decorator';
 
 export class UpdateIssueDto {
   @ApiPropertyOptional({ example: 'Updated title' })
@@ -46,31 +46,31 @@ export class UpdateIssueDto {
   @ApiPropertyOptional({ example: '123e4567-e89b-12d3-a456-426614174000', nullable: true })
   @IsOptional()
   @ValidateIf((_, val) => val !== null && val !== undefined)
-  @IsUUID()
+  @IsEntityId()
   assigneeId?: string | null;
 
   @ApiPropertyOptional({ example: '123e4567-e89b-12d3-a456-426614174000', nullable: true })
   @IsOptional()
   @ValidateIf((_, val) => val !== null && val !== undefined)
-  @IsUUID()
+  @IsEntityId()
   parentIssueId?: string | null;
 
   @ApiPropertyOptional({ example: '123e4567-e89b-12d3-a456-426614174000', nullable: true })
   @IsOptional()
   @ValidateIf((_, val) => val !== null && val !== undefined)
-  @IsUUID()
+  @IsEntityId()
   sprintId?: string | null;
 
   @ApiPropertyOptional({ example: '123e4567-e89b-12d3-a456-426614174000', nullable: true })
   @IsOptional()
   @ValidateIf((_, val) => val !== null && val !== undefined)
-  @IsUUID()
+  @IsEntityId()
   milestoneId?: string | null;
 
   @ApiPropertyOptional({ example: '123e4567-e89b-12d3-a456-426614174000', nullable: true })
   @IsOptional()
   @ValidateIf((_, val) => val !== null && val !== undefined)
-  @IsUUID()
+  @IsEntityId()
   releaseId?: string | null;
 
   @ApiPropertyOptional({ example: 5, nullable: true })

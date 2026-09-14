@@ -1,7 +1,6 @@
 import {
   IsOptional,
   IsString,
-  IsUUID,
   IsIn,
   IsInt,
   Min,
@@ -12,6 +11,7 @@ import { Type, Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IssueType, IssuePriority } from '@projectflow/types';
 import { ISSUE_TYPES, ISSUE_PRIORITIES } from './create-issue.dto';
+import { IsEntityId } from '../../../common/validators/is-entity-id.decorator';
 
 export class IssueQueryDto {
   @ApiPropertyOptional({ description: 'Filter by issue type', enum: ISSUE_TYPES })
@@ -31,17 +31,17 @@ export class IssueQueryDto {
 
   @ApiPropertyOptional({ description: 'Filter by assigned user UUID' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   assigneeId?: string;
 
   @ApiPropertyOptional({ description: 'Filter by reporter user UUID' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   reporterId?: string;
 
   @ApiPropertyOptional({ description: 'Filter by sprint UUID' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   sprintId?: string;
 
   @ApiPropertyOptional({ description: 'Search title, description, or issue key' })

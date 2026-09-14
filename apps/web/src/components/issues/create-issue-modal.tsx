@@ -37,6 +37,7 @@ export function CreateIssueModal({
   const [storyPoints, setStoryPoints] = useState<string>('');
   const [estimateHours, setEstimateHours] = useState<string>('');
   const [dueDate, setDueDate] = useState<string>('');
+  const [assigneeId, setAssigneeId] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   React.useEffect(() => {
@@ -59,6 +60,19 @@ export function CreateIssueModal({
     enabled: isOpen,
   });
 
+  // Fetch project members for assignee selection
+  const { data: projectMembers = [] } = useQuery({
+    queryKey: ['project-members', projectId],
+    queryFn: async () => {
+      try {
+        return await api.listProjectMembers(projectId);
+      } catch {
+        return [];
+      }
+    },
+    enabled: isOpen,
+  });
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -67,6 +81,7 @@ export function CreateIssueModal({
         type,
         priority,
         status: status || defaultStatus || 'TODO',
+        assigneeId: assigneeId || undefined,
         parentIssueId: parentIssueId || undefined,
         storyPoints: storyPoints ? parseInt(storyPoints, 10) : undefined,
         estimateHours: estimateHours ? parseInt(estimateHours, 10) : undefined,
@@ -82,6 +97,7 @@ export function CreateIssueModal({
       setDescription('');
       setType('TASK');
       setPriority('P2');
+      setAssigneeId('');
       setParentIssueId('');
       setShowParentSelector(false);
       setStoryPoints('');
@@ -292,7 +308,36 @@ export function CreateIssueModal({
             </div>
           )}
 
-          {/* Story Points & Due Date Row */}
+          {/* Assignee & Due Date Row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Assignee</label>
+              <select
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-background border border-input rounded-md focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer truncate"
+              >
+                <option value="">Unassigned</option>
+                {projectMembers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Due Date</label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-background border border-input rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          {/* Story Points & Estimate Hours Row */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">Story Points</label>
@@ -308,11 +353,14 @@ export function CreateIssueModal({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Due Date</label>
+              <label className="text-xs font-semibold text-foreground">Estimate (Hours)</label>
               <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+                type="number"
+                min="0"
+                max="1000"
+                placeholder="e.g. 8"
+                value={estimateHours}
+                onChange={(e) => setEstimateHours(e.target.value)}
                 className="w-full px-3 py-2 text-xs bg-background border border-input rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>

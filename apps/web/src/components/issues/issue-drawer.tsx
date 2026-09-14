@@ -33,9 +33,10 @@ import { cn } from '@/lib/utils';
 interface IssueDrawerProps {
   issueIdentifier: string | null;
   onClose: () => void;
+  onSelectIssue?: (issueKey: string) => void;
 }
 
-export function IssueDrawer({ issueIdentifier, onClose }: IssueDrawerProps) {
+export function IssueDrawer({ issueIdentifier, onClose, onSelectIssue }: IssueDrawerProps) {
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
   const [newComment, setNewComment] = useState('');
@@ -789,17 +790,24 @@ export function IssueDrawer({ issueIdentifier, onClose }: IssueDrawerProps) {
                               <Square className="h-4 w-4" />
                             )}
                           </button>
-                          <span className="font-mono text-[11px] text-muted-foreground font-semibold shrink-0">
-                            {subtask.issueKey}
-                          </span>
-                          <span
-                            className={cn(
-                              'font-medium text-foreground truncate',
-                              isDone && 'line-through text-muted-foreground',
-                            )}
+                          <button
+                            type="button"
+                            onClick={() => onSelectIssue?.(subtask.issueKey)}
+                            title={`Open ${subtask.issueKey}`}
+                            className="flex items-center gap-2 text-left truncate group-hover:text-primary transition-colors"
                           >
-                            {subtask.title}
-                          </span>
+                            <span className="font-mono text-[11px] text-muted-foreground font-semibold shrink-0 group-hover:text-primary underline-offset-2 hover:underline">
+                              {subtask.issueKey}
+                            </span>
+                            <span
+                              className={cn(
+                                'font-medium text-foreground truncate group-hover:text-primary',
+                                isDone && 'line-through text-muted-foreground',
+                              )}
+                            >
+                              {subtask.title}
+                            </span>
+                          </button>
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">

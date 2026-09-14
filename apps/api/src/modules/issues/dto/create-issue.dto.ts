@@ -3,7 +3,6 @@ import {
   IsNotEmpty,
   MaxLength,
   IsOptional,
-  IsUUID,
   IsIn,
   IsInt,
   Min,
@@ -13,6 +12,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IssueType, IssuePriority } from '@projectflow/types';
+import { IsEntityId } from '../../../common/validators/is-entity-id.decorator';
 
 export const ISSUE_TYPES: IssueType[] = ['TASK', 'BUG', 'STORY', 'EPIC', 'SUBTASK'];
 export const ISSUE_PRIORITIES: IssuePriority[] = ['P0', 'P1', 'P2', 'P3', 'P4'];
@@ -45,27 +45,27 @@ export class CreateIssueDto {
 
   @ApiPropertyOptional({ example: '123e4567-e89b-12d3-a456-426614174000', description: 'Assigned User UUID' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   assigneeId?: string;
 
   @ApiPropertyOptional({ example: '123e4567-e89b-12d3-a456-426614174000', description: 'Parent Issue UUID for subtasks/epics' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   parentIssueId?: string;
 
   @ApiPropertyOptional({ example: '123e4567-e89b-12d3-a456-426614174000', description: 'Sprint UUID' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   sprintId?: string;
 
   @ApiPropertyOptional({ example: '123e4567-e89b-12d3-a456-426614174000', description: 'Milestone UUID' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   milestoneId?: string;
 
   @ApiPropertyOptional({ example: '123e4567-e89b-12d3-a456-426614174000', description: 'Release UUID' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   releaseId?: string;
 
   @ApiPropertyOptional({ example: 3, description: 'Story point estimate (Fibonacci/integer)' })

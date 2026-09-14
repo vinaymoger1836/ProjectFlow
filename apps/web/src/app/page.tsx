@@ -384,6 +384,7 @@ function HomePageContent() {
         <IssueDrawer
           issueIdentifier={selectedIssueKey}
           onClose={handleCloseDrawer}
+          onSelectIssue={handleSelectIssue}
         />
 
         {/* Universal Create Issue Modal */}
