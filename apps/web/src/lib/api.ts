@@ -41,6 +41,19 @@ export interface IssueCommentItem {
   };
 }
 
+export interface ParsedIssueDraft {
+  title: string;
+  type: IssueType;
+  priority: IssuePriority;
+  status: string;
+  estimateHours?: number | null;
+  storyPoints?: number | null;
+  description: string;
+  suggestedDueDate?: string | null;
+  explanation: string;
+  modelUsed: string;
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('supabase_token') : null;
 
@@ -118,6 +131,21 @@ export const api = {
     return request<IssueCommentItem>(`/issues/${issueId}/comments`, {
       method: 'POST',
       body: JSON.stringify({ content }),
+    });
+  },
+
+  // AI Workflows
+  parseIssueWithAi: async (projectId: string, prompt: string): Promise<ParsedIssueDraft> => {
+    return request<ParsedIssueDraft>('/ai/parse-issue', {
+      method: 'POST',
+      body: JSON.stringify({ projectId, prompt }),
+    });
+  },
+
+  executeAiTool: async (tool: 'create_issue', projectId: string, payload: any) => {
+    return request<PaginatedIssues['items'][0]>('/ai/execute-tool', {
+      method: 'POST',
+      body: JSON.stringify({ tool, projectId, payload }),
     });
   },
 };

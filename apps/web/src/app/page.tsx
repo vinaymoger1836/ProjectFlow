@@ -19,6 +19,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { IssuesView } from '@/components/issues/issues-view';
+import { FloatingAiCopilot } from '@/components/ai/floating-ai-copilot';
 import { cn } from '@/lib/utils';
 
 type NavTab = 'overview' | 'issues' | 'board' | 'sprints';
@@ -325,6 +326,18 @@ function HomePageContent() {
             </div>
           )}
         </div>
+
+        {/* Floating AI Copilot Bubble (Option B - Expandable Chat with Generative IssueCard Previews) */}
+        <FloatingAiCopilot
+          onOpenIssueInDrawer={(issueKey) => {
+            setActiveTab('issues');
+            if (typeof window !== 'undefined') {
+              const url = new URL(window.location.href);
+              url.searchParams.set('issue', issueKey);
+              window.history.pushState({}, '', url.toString());
+            }
+          }}
+        />
       </main>
     </div>
   );

@@ -5,6 +5,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { IssuesModule } from './modules/issues/issues.module';
+import { AiModule } from './modules/ai/ai.module';
 import { HealthController } from './modules/health/health.controller';
 
 @Module({
@@ -18,6 +19,7 @@ import { HealthController } from './modules/health/health.controller';
     OrganizationsModule,
     ProjectsModule,
     IssuesModule,
+    AiModule,
   ],
   controllers: [HealthController],
   providers: [],
