@@ -122,7 +122,7 @@ export function CreateIssueModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto no-scrollbar p-4">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-fade-in"
@@ -152,13 +152,14 @@ export function CreateIssueModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
-          {errorMessage && (
-            <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden min-h-0">
+          <div className="p-6 space-y-4 overflow-y-auto no-scrollbar flex-1 min-h-0">
+            {errorMessage && (
+              <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
 
           {/* Project Indicator (Explicit Hierarchy Confirmation) */}
           <div className="space-y-1.5">
@@ -328,25 +329,26 @@ export function CreateIssueModal({
               className="w-full p-3 text-xs bg-background border border-input rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
+        </div>
 
-          {/* Footer Actions */}
-          <div className="pt-3 border-t border-border flex items-center justify-end gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-medium rounded-md border border-border hover:bg-muted transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={createMutation.isPending}
-              className="px-4 py-2 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-sm"
-            >
-              {createMutation.isPending ? 'Creating...' : 'Create Issue'}
-            </button>
-          </div>
-        </form>
+        {/* Footer Actions */}
+        <div className="px-6 py-3.5 bg-card border-t border-border flex items-center justify-end gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-xs font-medium rounded-md border border-border hover:bg-muted transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={createMutation.isPending}
+            className="px-4 py-2 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-sm"
+          >
+            {createMutation.isPending ? 'Creating...' : 'Create Issue'}
+          </button>
+        </div>
+      </form>
       </div>
     </div>
   );
