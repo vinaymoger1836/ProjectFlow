@@ -229,7 +229,10 @@ export class IssuesService {
         reporterAvatarUrl: reporterUser.avatarUrl,
       })
       .from(issues)
+      .leftJoin(reporterUser, eq(issues.reporterId, reporterUser.id))
       .leftJoin(assigneeUser, eq(issues.assigneeId, assigneeUser.id))
+      .where(whereClause)
+      .orderBy(orderExpr)
       .limit(limit)
       .offset(offset);
 
@@ -585,8 +588,8 @@ export class IssuesService {
         reporterAvatarUrl: reporterUser.avatarUrl,
       })
       .from(issues)
+      .leftJoin(reporterUser, eq(issues.reporterId, reporterUser.id))
       .leftJoin(assigneeUser, eq(issues.assigneeId, assigneeUser.id))
-      .innerJoin(reporterUser, eq(issues.reporterId, reporterUser.id))
       .where(eq(issues.id, issueId))
       .limit(1);
 
