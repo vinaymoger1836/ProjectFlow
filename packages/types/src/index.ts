@@ -48,6 +48,7 @@ export interface Project {
   description?: string | null;
   leadId: string;
   healthStatus: ProjectHealthStatus;
+  issueCounter: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -82,6 +83,7 @@ export interface Issue {
   id: string;
   projectId: string;
   issueKey: string; // e.g. "PAY-104"
+  keyNumber: number;
   title: string;
   description?: string | null;
   type: IssueType;
@@ -96,6 +98,8 @@ export interface Issue {
   storyPoints?: number | null;
   estimateHours?: number | null;
   dueDate?: Date | null;
+  isArchived: boolean;
+  deletedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
   resolvedAt?: Date | null;

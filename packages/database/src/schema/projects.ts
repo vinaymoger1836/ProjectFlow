@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, jsonb, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, jsonb, timestamp, integer } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { teams } from './teams';
 import { users } from './users';
@@ -16,6 +16,7 @@ export const projects = pgTable('projects', {
     .references(() => users.id, { onDelete: 'restrict' })
     .notNull(),
   healthStatus: varchar('health_status', { length: 50 }).default('HEALTHY').notNull(),
+  issueCounter: integer('issue_counter').default(0).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

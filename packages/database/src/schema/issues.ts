@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, integer, timestamp, boolean } from 'drizzle-orm/pg-core';
 import { projects } from './projects';
 import { users } from './users';
 
@@ -8,10 +8,11 @@ export const issues = pgTable('issues', {
     .references(() => projects.id, { onDelete: 'cascade' })
     .notNull(),
   issueKey: varchar('issue_key', { length: 50 }).notNull(), // e.g. "PROJ-1"
+  keyNumber: integer('key_number').notNull(), // 1, 2, 3... sequential per project
   title: varchar('title', { length: 500 }).notNull(),
   description: text('description'),
   type: varchar('type', { length: 50 }).notNull(), // TASK, BUG, STORY, EPIC, SUBTASK
-  status: varchar('status', { length: 50 }).notNull(), // BACKLOG, TODO, IN_PROGRESS, IN_REVIEW, DONE, etc.
+  status: varchar('status', { length: 50 }).default('TODO').notNull(), // Default to TODO
   priority: varchar('priority', { length: 10 }).notNull(), // P0, P1, P2, P3, P4
   assigneeId: uuid('assignee_id').references(() => users.id, { onDelete: 'set null' }),
   reporterId: uuid('reporter_id')
@@ -24,6 +25,8 @@ export const issues = pgTable('issues', {
   storyPoints: integer('story_points'),
   estimateHours: integer('estimate_hours'),
   dueDate: timestamp('due_date', { withTimezone: true }),
+  isArchived: boolean('is_archived').default(false).notNull(), // Soft delete flag
+  deletedAt: timestamp('deleted_at', { withTimezone: true }), // Soft delete timestamp
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
