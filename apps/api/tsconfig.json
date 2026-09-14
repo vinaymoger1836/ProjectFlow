@@ -10,18 +10,16 @@
     "sourceMap": true,
     "outDir": "./dist",
     "baseUrl": "./",
-    "incremental": true,
+    "incremental": false,
     "skipLibCheck": true,
     "strictNullChecks": true,
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
+    "rootDir": "src",
     "paths": {
-      "@/*": ["src/*"],
-      "@projectflow/database": ["../../packages/database/src/index.ts"],
-      "@projectflow/database/schema": ["../../packages/database/src/schema/index.ts"],
-      "@projectflow/types": ["../../packages/types/src/index.ts"]
+      "@/*": ["src/*"]
     }
   }
 }
