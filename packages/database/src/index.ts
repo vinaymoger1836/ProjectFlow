@@ -22,16 +22,25 @@ export function normalizeConnectionString(rawUrl?: string): string {
   return `${rawUrl.substring(0, protoIdx + 3)}${user}:${encodeURIComponent(decodeURIComponent(pass))}@${hostPart}`;
 }
 
+import dns from 'node:dns';
+
+// Ensure IPv4 lookup precedence on dual-stack environments (Windows / cloud hosts)
+if (dns && typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 export function getDbPool(connectionString?: string) {
   if (!pool) {
     const connStr = normalizeConnectionString(
       connectionString || process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/projectflow',
     );
+    const isRemote = connStr.includes('supabase.com') || connStr.includes('sslmode=require');
     pool = new Pool({
       connectionString: connStr,
-      max: 20,
+      max: 10,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 10000,
+      ssl: isRemote ? { rejectUnauthorized: false } : undefined,
     });
   }
   return pool;

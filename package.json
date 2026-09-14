@@ -10,6 +10,7 @@
     "db:generate": "pnpm --filter @projectflow/database generate",
     "db:migrate": "pnpm --filter @projectflow/database migrate",
     "db:push": "pnpm --filter @projectflow/database push",
+    "db:seed": "pnpm --filter @projectflow/database seed",
     "db:studio": "pnpm --filter @projectflow/database studio"
   },
   "devDependencies": {

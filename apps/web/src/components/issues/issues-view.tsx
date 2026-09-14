@@ -9,7 +9,7 @@ import { CreateIssueModal } from './create-issue-modal';
 import { api, PaginatedIssues } from '@/lib/api';
 
 // Demo fallback issues for initial workspace rendering before API database seed is created
-const DEMO_ISSUES: PaginatedIssues['items'] = [
+export const DEMO_ISSUES: PaginatedIssues['items'] = [
   {
     id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
     projectId: '11111111-1111-1111-1111-111111111111',

@@ -18,12 +18,13 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/schema/index.ts --format cjs,esm --dts",
+    "build": "tsup src/index.ts src/schema/index.ts src/seed.ts --format cjs,esm --dts",
     "dev": "tsup src/index.ts src/schema/index.ts --format cjs,esm --dts --watch",
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "push": "drizzle-kit push",
     "studio": "drizzle-kit studio",
+    "seed": "node dist/seed.js",
     "clean": "rimraf dist"
   },
   "dependencies": {
