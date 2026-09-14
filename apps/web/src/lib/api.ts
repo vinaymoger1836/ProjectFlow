@@ -41,6 +41,22 @@ export interface IssueCommentItem {
   };
 }
 
+export interface ActivityItem {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  details: Record<string, any>;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl?: string | null;
+  } | null;
+}
+
+
 export interface ParsedIssueDraft {
   title: string;
   type: IssueType;
@@ -172,4 +188,34 @@ export const api = {
       method: 'POST',
     });
   },
+
+  suggestTriage: async (issueId: string): Promise<{
+    suggestedPriority: string;
+    priorityReason: string;
+    suggestedAssigneeId: string | null;
+    suggestedAssigneeName: string;
+    assigneeReason: string;
+    modelUsed: string;
+  }> => {
+    return request(`/ai/issues/${issueId}/suggest-triage`, {
+      method: 'POST',
+    });
+  },
+
+  // Activities & Attachments
+  listActivities: async (issueId: string): Promise<any[]> => {
+    return request<any[]>(`/issues/${issueId}/activity`);
+  },
+
+  listAttachments: async (issueId: string): Promise<any[]> => {
+    return request<any[]>(`/issues/${issueId}/attachments`);
+  },
+
+  addAttachment: async (issueId: string, payload: { fileName: string; fileSize: number; mimeType: string; s3Key: string; s3Url: string }): Promise<any> => {
+    return request<any>(`/issues/${issueId}/attachments`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
 };
+

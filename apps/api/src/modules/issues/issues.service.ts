@@ -351,15 +351,20 @@ export class IssuesService {
   /**
    * Updates issue fields, handles status transitions, updates labels, and writes activity log.
    */
-  async updateIssue(userId: string, issueId: string, dto: UpdateIssueDto) {
+  async updateIssue(userId: string, identifier: string, dto: UpdateIssueDto) {
+    const isIssueKey = /^[A-Z0-9]+-\d+$/i.test(identifier);
+    const condition = isIssueKey
+      ? eq(sql`UPPER(${issues.issueKey})`, identifier.toUpperCase())
+      : eq(issues.id, identifier);
+
     const [existing] = await this.db
       .select()
       .from(issues)
-      .where(eq(issues.id, issueId))
+      .where(condition)
       .limit(1);
 
     if (!existing) {
-      throw new NotFoundException(`Issue with ID '${issueId}' not found.`);
+      throw new NotFoundException(`Issue '${identifier}' not found.`);
     }
 
     const project = await this.getProjectAndVerifyAccess(userId, existing.projectId);
@@ -373,6 +378,7 @@ export class IssuesService {
       if (dto.description !== undefined) updates.description = dto.description;
       if (dto.type !== undefined) updates.type = dto.type;
       if (dto.priority !== undefined) updates.priority = dto.priority;
+      if (dto.status !== undefined) updates.status = dto.status;
       if (dto.assigneeId !== undefined) updates.assigneeId = dto.assigneeId;
       if (dto.parentIssueId !== undefined) updates.parentIssueId = dto.parentIssueId;
       if (dto.sprintId !== undefined) updates.sprintId = dto.sprintId;
@@ -384,25 +390,26 @@ export class IssuesService {
         updates.dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
       }
 
-      // Handle status and resolution timestamp
-      if (dto.status !== undefined && dto.status !== existing.status) {
-        updates.status = dto.status;
-        if (dto.status.toUpperCase() === 'DONE') {
+      // Handle status timestamps
+      if (dto.status && dto.status !== existing.status) {
+        if (dto.status === 'DONE') {
           updates.resolvedAt = new Date();
-        } else if (existing.status.toUpperCase() === 'DONE') {
+          updates.closedAt = new Date();
+        } else if (existing.status === 'DONE') {
           updates.resolvedAt = null;
+          updates.closedAt = null;
         }
       }
 
-      await tx.update(issues).set(updates).where(eq(issues.id, issueId));
+      await tx.update(issues).set(updates).where(eq(issues.id, existing.id));
 
-      // Update labels if provided
+      // Handle label associations if provided
       if (dto.labelIds !== undefined) {
-        await tx.delete(issueLabels).where(eq(issueLabels.issueId, issueId));
+        await tx.delete(issueLabels).where(eq(issueLabels.issueId, existing.id));
         if (dto.labelIds.length > 0) {
           for (const labelId of dto.labelIds) {
             await tx.insert(issueLabels).values({
-              issueId,
+              issueId: existing.id,
               labelId,
             });
           }
@@ -416,7 +423,7 @@ export class IssuesService {
         projectId: existing.projectId,
         userId,
         entityType: 'ISSUE',
-        entityId: issueId,
+        entityId: existing.id,
         action,
         details: {
           previousStatus: existing.status,
@@ -425,7 +432,7 @@ export class IssuesService {
         },
       });
 
-      return await this.getIssueDetailsById(issueId, tx);
+      return await this.getIssueDetailsById(existing.id, tx);
     });
 
     this.eventsGateway?.broadcastIssueUpdated(existing.projectId, result);
@@ -435,18 +442,24 @@ export class IssuesService {
   /**
    * Soft-deletes an issue (sets isArchived to true and records deletedAt).
    */
-  async deleteIssue(userId: string, issueId: string) {
+  async deleteIssue(userId: string, identifier: string) {
+    const isIssueKey = /^[A-Z0-9]+-\d+$/i.test(identifier);
+    const condition = isIssueKey
+      ? eq(sql`UPPER(${issues.issueKey})`, identifier.toUpperCase())
+      : eq(issues.id, identifier);
+
     const [existing] = await this.db
       .select()
       .from(issues)
-      .where(eq(issues.id, issueId))
+      .where(condition)
       .limit(1);
 
     if (!existing) {
-      throw new NotFoundException(`Issue with ID '${issueId}' not found.`);
+      throw new NotFoundException(`Issue '${identifier}' not found.`);
     }
 
     const project = await this.getProjectAndVerifyAccess(userId, existing.projectId);
+
 
     await this.db.transaction(async (tx) => {
       await tx
@@ -456,20 +469,21 @@ export class IssuesService {
           deletedAt: new Date(),
           updatedAt: new Date(),
         })
-        .where(eq(issues.id, issueId));
+        .where(eq(issues.id, existing.id));
 
       await tx.insert(activities).values({
         organizationId: project.organizationId,
         projectId: existing.projectId,
         userId,
         entityType: 'ISSUE',
-        entityId: issueId,
+        entityId: existing.id,
         action: 'ARCHIVED',
         details: {
           issueKey: existing.issueKey,
           title: existing.title,
         },
       });
+
     });
 
     return { success: true, message: `Issue ${existing.issueKey} archived successfully.` };
@@ -478,23 +492,14 @@ export class IssuesService {
   /**
    * Adds a comment to an issue and logs activity.
    */
-  async addComment(userId: string, issueId: string, dto: CreateCommentDto) {
-    const [issue] = await this.db
-      .select()
-      .from(issues)
-      .where(eq(issues.id, issueId))
-      .limit(1);
-
-    if (!issue) {
-      throw new NotFoundException(`Issue with ID '${issueId}' not found.`);
-    }
-
+  async addComment(userId: string, identifier: string, dto: CreateCommentDto) {
+    const issue = await this.getIssue(userId, identifier);
     const project = await this.getProjectAndVerifyAccess(userId, issue.projectId);
 
     const [comment] = await this.db
       .insert(issueComments)
       .values({
-        issueId,
+        issueId: issue.id,
         userId,
         content: dto.content,
       })
@@ -505,7 +510,7 @@ export class IssuesService {
       projectId: issue.projectId,
       userId,
       entityType: 'ISSUE',
-      entityId: issueId,
+      entityId: issue.id,
       action: 'COMMENT_ADDED',
       details: {
         commentId: comment.id,
@@ -529,25 +534,16 @@ export class IssuesService {
       author,
     };
 
-    this.eventsGateway?.broadcastCommentAdded(issue.projectId, issueId, commentResult);
+    this.eventsGateway?.broadcastCommentAdded(issue.projectId, issue.id, commentResult);
     return commentResult;
   }
 
   /**
    * Lists all comments for an issue in chronological order.
    */
-  async listComments(userId: string, issueId: string) {
-    const [issue] = await this.db
-      .select({ id: issues.id, projectId: issues.projectId })
-      .from(issues)
-      .where(eq(issues.id, issueId))
-      .limit(1);
+  async listComments(userId: string, identifier: string) {
+    const issue = await this.getIssue(userId, identifier);
 
-    if (!issue) {
-      throw new NotFoundException(`Issue with ID '${issueId}' not found.`);
-    }
-
-    await this.getProjectAndVerifyAccess(userId, issue.projectId);
 
     const comments = await this.db
       .select({
@@ -564,8 +560,9 @@ export class IssuesService {
       })
       .from(issueComments)
       .innerJoin(commentAuthor, eq(issueComments.userId, commentAuthor.id))
-      .where(eq(issueComments.issueId, issueId))
+      .where(eq(issueComments.issueId, issue.id))
       .orderBy(asc(issueComments.createdAt));
+
 
     return comments;
   }
@@ -695,20 +692,10 @@ export class IssuesService {
   }
 
   /**
-   * Lists all child subtasks for an issue in chronological/key order.
+   * Lists all subtasks belonging to a parent issue.
    */
-  async listSubtasks(userId: string, issueId: string) {
-    const [parent] = await this.db
-      .select({ id: issues.id, projectId: issues.projectId })
-      .from(issues)
-      .where(eq(issues.id, issueId))
-      .limit(1);
-
-    if (!parent) {
-      throw new NotFoundException(`Issue with ID '${issueId}' not found.`);
-    }
-
-    await this.getProjectAndVerifyAccess(userId, parent.projectId);
+  async listSubtasks(userId: string, identifier: string) {
+    const parent = await this.getIssue(userId, identifier);
 
     return await this.db
       .select({
@@ -727,34 +714,45 @@ export class IssuesService {
       })
       .from(issues)
       .leftJoin(assigneeUser, eq(issues.assigneeId, assigneeUser.id))
-      .where(and(eq(issues.parentIssueId, issueId), eq(issues.isArchived, false)))
+      .where(and(eq(issues.parentIssueId, parent.id), eq(issues.isArchived, false)))
       .orderBy(asc(issues.keyNumber));
   }
 
   /**
    * Creates a child subtask under a parent issue.
    */
-  async createSubtask(userId: string, parentIssueId: string, dto: CreateSubtaskDto) {
-    const [parent] = await this.db
-      .select({ id: issues.id, projectId: issues.projectId })
-      .from(issues)
-      .where(eq(issues.id, parentIssueId))
-      .limit(1);
+  async createSubtask(userId: string, parentIdentifier: string, dto: CreateSubtaskDto) {
+    const parent = await this.getIssue(userId, parentIdentifier);
 
-    if (!parent) {
-      throw new NotFoundException(`Parent issue with ID '${parentIssueId}' not found.`);
-    }
-
-    return await this.createIssue(userId, parent.projectId, {
+    const subtask = await this.createIssue(userId, parent.projectId, {
       title: dto.title,
       type: 'SUBTASK',
       priority: dto.priority || 'P2',
       status: 'TODO',
       estimateHours: dto.estimateHours,
       assigneeId: dto.assigneeId,
-      parentIssueId: parentIssueId,
+      parentIssueId: parent.id,
     });
+
+    const project = await this.getProjectAndVerifyAccess(userId, parent.projectId);
+
+    await this.db.insert(activities).values({
+      organizationId: project.organizationId,
+      projectId: parent.projectId,
+      userId,
+      entityType: 'ISSUE',
+      entityId: parent.id,
+      action: 'SUBTASK_ADDED',
+      details: {
+        subtaskId: subtask.id,
+        subtaskKey: subtask.issueKey,
+        title: subtask.title,
+      },
+    });
+
+    return subtask;
   }
+
 
   /**
    * Lists all activity history logs for an issue in reverse chronological order.

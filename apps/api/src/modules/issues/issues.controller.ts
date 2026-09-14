@@ -73,10 +73,10 @@ export class IssuesController {
 
   @Patch('issues/:issueId')
   @ApiOperation({ summary: 'Update issue fields, status, assignee, or labels' })
-  @ApiParam({ name: 'issueId', description: 'Issue UUID' })
+  @ApiParam({ name: 'issueId', description: 'Issue UUID or formatted Key (e.g. PAY-1)' })
   async updateIssue(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('issueId', ParseUUIDPipe) issueId: string,
+    @Param('issueId') issueId: string,
     @Body() dto: UpdateIssueDto,
   ) {
     const issue = await this.issuesService.updateIssue(user.id, issueId, dto);
@@ -88,10 +88,10 @@ export class IssuesController {
 
   @Delete('issues/:issueId')
   @ApiOperation({ summary: 'Soft-delete / archive an issue' })
-  @ApiParam({ name: 'issueId', description: 'Issue UUID' })
+  @ApiParam({ name: 'issueId', description: 'Issue UUID or formatted Key (e.g. PAY-1)' })
   async deleteIssue(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('issueId', ParseUUIDPipe) issueId: string,
+    @Param('issueId') issueId: string,
   ) {
     const result = await this.issuesService.deleteIssue(user.id, issueId);
     return {
@@ -100,12 +100,13 @@ export class IssuesController {
     };
   }
 
+
   @Get('issues/:issueId/comments')
   @ApiOperation({ summary: 'List all comments on an issue' })
-  @ApiParam({ name: 'issueId', description: 'Issue UUID' })
+  @ApiParam({ name: 'issueId', description: 'Issue UUID or formatted Key (e.g. PAY-1)' })
   async listComments(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('issueId', ParseUUIDPipe) issueId: string,
+    @Param('issueId') issueId: string,
   ) {
     const comments = await this.issuesService.listComments(user.id, issueId);
     return {
@@ -116,10 +117,10 @@ export class IssuesController {
 
   @Post('issues/:issueId/comments')
   @ApiOperation({ summary: 'Add a comment to an issue' })
-  @ApiParam({ name: 'issueId', description: 'Issue UUID' })
+  @ApiParam({ name: 'issueId', description: 'Issue UUID or formatted Key (e.g. PAY-1)' })
   async addComment(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('issueId', ParseUUIDPipe) issueId: string,
+    @Param('issueId') issueId: string,
     @Body() dto: CreateCommentDto,
   ) {
     const comment = await this.issuesService.addComment(user.id, issueId, dto);
@@ -131,10 +132,10 @@ export class IssuesController {
 
   @Get('issues/:issueId/subtasks')
   @ApiOperation({ summary: 'List all child subtasks for an issue' })
-  @ApiParam({ name: 'issueId', description: 'Parent Issue UUID' })
+  @ApiParam({ name: 'issueId', description: 'Parent Issue UUID or formatted Key (e.g. PAY-1)' })
   async listSubtasks(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('issueId', ParseUUIDPipe) issueId: string,
+    @Param('issueId') issueId: string,
   ) {
     const subtasks = await this.issuesService.listSubtasks(user.id, issueId);
     return {
@@ -145,10 +146,10 @@ export class IssuesController {
 
   @Post('issues/:issueId/subtasks')
   @ApiOperation({ summary: 'Create a child subtask under a parent issue' })
-  @ApiParam({ name: 'issueId', description: 'Parent Issue UUID' })
+  @ApiParam({ name: 'issueId', description: 'Parent Issue UUID or formatted Key (e.g. PAY-1)' })
   async createSubtask(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('issueId', ParseUUIDPipe) issueId: string,
+    @Param('issueId') issueId: string,
     @Body() dto: any,
   ) {
     const subtask = await this.issuesService.createSubtask(user.id, issueId, dto);
@@ -160,10 +161,10 @@ export class IssuesController {
 
   @Get('issues/:issueId/activity')
   @ApiOperation({ summary: 'List activity audit trail for an issue' })
-  @ApiParam({ name: 'issueId', description: 'Issue UUID' })
+  @ApiParam({ name: 'issueId', description: 'Issue UUID or formatted Key (e.g. PAY-1)' })
   async listActivities(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('issueId', ParseUUIDPipe) issueId: string,
+    @Param('issueId') issueId: string,
   ) {
     const activities = await this.issuesService.listActivities(user.id, issueId);
     return {
@@ -174,10 +175,10 @@ export class IssuesController {
 
   @Get('issues/:issueId/attachments')
   @ApiOperation({ summary: 'List all attachments uploaded to an issue' })
-  @ApiParam({ name: 'issueId', description: 'Issue UUID' })
+  @ApiParam({ name: 'issueId', description: 'Issue UUID or formatted Key (e.g. PAY-1)' })
   async listAttachments(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('issueId', ParseUUIDPipe) issueId: string,
+    @Param('issueId') issueId: string,
   ) {
     const attachments = await this.issuesService.listAttachments(user.id, issueId);
     return {
@@ -188,10 +189,10 @@ export class IssuesController {
 
   @Post('issues/:issueId/attachments')
   @ApiOperation({ summary: 'Upload / attach a file reference to an issue' })
-  @ApiParam({ name: 'issueId', description: 'Issue UUID' })
+  @ApiParam({ name: 'issueId', description: 'Issue UUID or formatted Key (e.g. PAY-1)' })
   async addAttachment(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('issueId', ParseUUIDPipe) issueId: string,
+    @Param('issueId') issueId: string,
     @Body() dto: any,
   ) {
     const attachment = await this.issuesService.addAttachment(user.id, issueId, dto);
@@ -200,5 +201,6 @@ export class IssuesController {
       data: attachment,
     };
   }
+
 }
 

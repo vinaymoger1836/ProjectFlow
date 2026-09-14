@@ -80,4 +80,20 @@ export class AiController {
       data: result,
     };
   }
+
+  @Post('issues/:issueId/suggest-triage')
+  @ApiOperation({
+    summary: 'Suggest optimal priority and team assignee based on issue complexity and active workload',
+  })
+  async suggestTriage(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('issueId') issueId: string,
+  ) {
+    const result = await this.aiService.suggestTriage(user.id, issueId);
+    return {
+      success: true,
+      data: result,
+    };
+  }
 }
+

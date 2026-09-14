@@ -587,7 +587,7 @@ Analyze this issue and discussion thread. Produce a crisp executive summary in J
         id: users.id,
         name: users.name,
         email: users.email,
-        role: userRoles.role,
+        roleId: userRoles.roleId,
       })
       .from(userRoles)
       .innerJoin(users, eq(userRoles.userId, users.id))

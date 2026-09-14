@@ -19,6 +19,9 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { IssuesView } from '@/components/issues/issues-view';
+import { KanbanBoard } from '@/components/kanban/kanban-board';
+import { IssueDrawer } from '@/components/issues/issue-drawer';
+import { CreateIssueModal } from '@/components/issues/create-issue-modal';
 import { FloatingAiCopilot } from '@/components/ai/floating-ai-copilot';
 import { cn } from '@/lib/utils';
 
@@ -27,13 +30,42 @@ type NavTab = 'overview' | 'issues' | 'board' | 'sprints';
 function HomePageContent() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<NavTab>('overview');
+  const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [defaultCreateStatus, setDefaultCreateStatus] = useState<string>('TODO');
+  const projectId = '11111111-1111-1111-1111-111111111111';
 
-  // Auto-switch to issues tab if URL contains ?issue=KEY
+  // Sync drawer with URL ?issue=KEY
   useEffect(() => {
-    if (searchParams.get('issue')) {
-      setActiveTab('issues');
+    const issueParam = searchParams.get('issue');
+    if (issueParam) {
+      setSelectedIssueKey(issueParam);
     }
   }, [searchParams]);
+
+  const handleSelectIssue = (issueKey: string) => {
+    setSelectedIssueKey(issueKey);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('issue', issueKey);
+      window.history.pushState({}, '', url.toString());
+    }
+  };
+
+  const handleCloseDrawer = () => {
+    setSelectedIssueKey(null);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('issue');
+      window.history.pushState({}, '', url.toString());
+    }
+  };
+
+  const handleOpenCreateModal = (status = 'TODO') => {
+    setDefaultCreateStatus(status);
+    setIsCreateModalOpen(true);
+  };
+
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
@@ -205,18 +237,32 @@ function HomePageContent() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setActiveTab('issues')}
                 className={cn(
-                  'px-3.5 py-1.5 text-xs font-medium rounded-md border transition-colors',
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors',
                   activeTab === 'issues'
-                    ? 'border-primary bg-primary/10 text-primary'
+                    ? 'border-primary bg-primary/10 text-primary font-semibold'
                     : 'border-border bg-card hover:bg-muted text-foreground',
                 )}
               >
-                View Issues Table
+                <ListTodo className="h-3.5 w-3.5" />
+                <span>Issues Table</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('board')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors',
+                  activeTab === 'board'
+                    ? 'border-primary bg-primary/10 text-primary font-semibold'
+                    : 'border-border bg-card hover:bg-muted text-foreground',
+                )}
+              >
+                <Kanban className="h-3.5 w-3.5" />
+                <span>Kanban Board</span>
               </button>
             </div>
           </div>
@@ -274,7 +320,11 @@ function HomePageContent() {
                 </div>
 
                 <div className="pt-2">
-                  <IssuesView />
+                  <IssuesView
+                    projectId={projectId}
+                    onSelectIssue={handleSelectIssue}
+                    onOpenCreateModal={() => handleOpenCreateModal()}
+                  />
                 </div>
               </div>
             </div>
@@ -288,24 +338,27 @@ function HomePageContent() {
                   View, filter, sort, and customize columns across all project issues. Click any row to slide open the detail drawer.
                 </p>
               </div>
-              <IssuesView />
+              <IssuesView
+                projectId={projectId}
+                onSelectIssue={handleSelectIssue}
+                onOpenCreateModal={() => handleOpenCreateModal()}
+              />
             </div>
           )}
 
           {activeTab === 'board' && (
-            <div className="p-12 text-center rounded-lg border border-dashed border-border bg-card/40 space-y-3">
-              <Kanban className="h-8 w-8 text-muted-foreground mx-auto" />
-              <h3 className="font-semibold text-base">Interactive Kanban Board (Phase 3)</h3>
-              <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                Drag-and-drop Kanban board powered by @dnd-kit and real-time WebSockets synchronization is planned for Phase 3.
-              </p>
-              <button
-                type="button"
-                onClick={() => setActiveTab('issues')}
-                className="px-3.5 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground"
-              >
-                Switch to Issues Table
-              </button>
+            <div className="space-y-4">
+              <div className="border-b border-border pb-2">
+                <h3 className="text-lg font-bold">Active Kanban Board</h3>
+                <p className="text-xs text-muted-foreground">
+                  Real-time collaborative drag-and-drop workflow with instant optimistic updates and WebSockets synchronization.
+                </p>
+              </div>
+              <KanbanBoard
+                projectId={projectId}
+                onSelectIssue={handleSelectIssue}
+                onOpenCreateModal={(status) => handleOpenCreateModal(status)}
+              />
             </div>
           )}
 
@@ -327,17 +380,30 @@ function HomePageContent() {
           )}
         </div>
 
+        {/* Universal Slide-Over Drawer */}
+        <IssueDrawer
+          issueIdentifier={selectedIssueKey}
+          onClose={handleCloseDrawer}
+        />
+
+        {/* Universal Create Issue Modal */}
+        <CreateIssueModal
+          projectId={projectId}
+          projectName="Payment Integration Platform"
+          projectKey="PAY"
+          isOpen={isCreateModalOpen}
+          defaultStatus={defaultCreateStatus}
+          onClose={() => setIsCreateModalOpen(false)}
+          onCreated={(key) => handleSelectIssue(key)}
+        />
+
         {/* Floating AI Copilot Bubble (Option B - Expandable Chat with Generative IssueCard Previews) */}
         <FloatingAiCopilot
           onOpenIssueInDrawer={(issueKey) => {
-            setActiveTab('issues');
-            if (typeof window !== 'undefined') {
-              const url = new URL(window.location.href);
-              url.searchParams.set('issue', issueKey);
-              window.history.pushState({}, '', url.toString());
-            }
+            handleSelectIssue(issueKey);
           }}
         />
+
       </main>
     </div>
   );

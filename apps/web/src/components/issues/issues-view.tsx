@@ -10,10 +10,14 @@ import { api } from '@/lib/api';
 
 interface IssuesViewContentProps {
   projectId?: string;
+  onSelectIssue?: (issueKey: string) => void;
+  onOpenCreateModal?: () => void;
 }
 
 function IssuesViewContent({
   projectId = '11111111-1111-1111-1111-111111111111',
+  onSelectIssue: externalSelectIssue,
+  onOpenCreateModal: externalOpenCreateModal,
 }: IssuesViewContentProps) {
   const searchParams = useSearchParams();
   const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
@@ -21,11 +25,12 @@ function IssuesViewContent({
 
   // Sync drawer with URL ?issue=KEY
   useEffect(() => {
+    if (externalSelectIssue) return;
     const issueParam = searchParams.get('issue');
     if (issueParam) {
       setSelectedIssueKey(issueParam);
     }
-  }, [searchParams]);
+  }, [searchParams, externalSelectIssue]);
 
   // Fetch live issues directly from Cloud Supabase via NestJS API
   const { data: issues = [], isLoading } = useQuery({
@@ -37,6 +42,10 @@ function IssuesViewContent({
   });
 
   const handleSelectIssue = (issueKey: string) => {
+    if (externalSelectIssue) {
+      externalSelectIssue(issueKey);
+      return;
+    }
     setSelectedIssueKey(issueKey);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -54,6 +63,14 @@ function IssuesViewContent({
     }
   };
 
+  const handleOpenCreateModal = () => {
+    if (externalOpenCreateModal) {
+      externalOpenCreateModal();
+    } else {
+      setIsCreateModalOpen(true);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Issues Table */}
@@ -61,27 +78,32 @@ function IssuesViewContent({
         issues={issues}
         isLoading={isLoading}
         onSelectIssue={handleSelectIssue}
-        onOpenCreateModal={() => setIsCreateModalOpen(true)}
+        onOpenCreateModal={handleOpenCreateModal}
       />
 
-      {/* Universal Slide-Over Drawer */}
-      <IssueDrawer
-        issueIdentifier={selectedIssueKey}
-        onClose={handleCloseDrawer}
-      />
+      {/* Internal Slide-Over Drawer if not managed by parent */}
+      {!externalSelectIssue && (
+        <IssueDrawer
+          issueIdentifier={selectedIssueKey}
+          onClose={handleCloseDrawer}
+        />
+      )}
 
-      {/* Create Issue Modal */}
-      <CreateIssueModal
-        projectId={projectId}
-        projectName="Payment Integration Platform"
-        projectKey="PAY"
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onCreated={(key) => handleSelectIssue(key)}
-      />
+      {/* Internal Create Issue Modal if not managed by parent */}
+      {!externalOpenCreateModal && (
+        <CreateIssueModal
+          projectId={projectId}
+          projectName="Payment Integration Platform"
+          projectKey="PAY"
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+          onCreated={(key) => handleSelectIssue(key)}
+        />
+      )}
     </div>
   );
 }
+
 
 export function IssuesView(props: IssuesViewContentProps) {
   return (

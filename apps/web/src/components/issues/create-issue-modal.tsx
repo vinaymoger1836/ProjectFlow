@@ -11,6 +11,7 @@ interface CreateIssueModalProps {
   projectName?: string;
   projectKey?: string;
   isOpen: boolean;
+  defaultStatus?: string;
   onClose: () => void;
   onCreated?: (issueKey: string) => void;
 }
@@ -20,6 +21,7 @@ export function CreateIssueModal({
   projectName = 'Payment Integration Platform',
   projectKey = 'PAY',
   isOpen,
+  defaultStatus = 'TODO',
   onClose,
   onCreated,
 }: CreateIssueModalProps) {
@@ -29,12 +31,19 @@ export function CreateIssueModal({
   const [description, setDescription] = useState('');
   const [type, setType] = useState<IssueType>('TASK');
   const [priority, setPriority] = useState<IssuePriority>('P2');
+  const [status, setStatus] = useState<string>(defaultStatus);
   const [parentIssueId, setParentIssueId] = useState<string>('');
   const [showParentSelector, setShowParentSelector] = useState(false);
   const [storyPoints, setStoryPoints] = useState<string>('');
   const [estimateHours, setEstimateHours] = useState<string>('');
   const [dueDate, setDueDate] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (defaultStatus) {
+      setStatus(defaultStatus);
+    }
+  }, [defaultStatus, isOpen]);
 
   // Fetch project issues to allow selecting a parent task/epic/story
   const { data: issuesData } = useQuery({
@@ -57,7 +66,7 @@ export function CreateIssueModal({
         description: description.trim() || undefined,
         type,
         priority,
-        status: 'TODO',
+        status: status || defaultStatus || 'TODO',
         parentIssueId: parentIssueId || undefined,
         storyPoints: storyPoints ? parseInt(storyPoints, 10) : undefined,
         estimateHours: estimateHours ? parseInt(estimateHours, 10) : undefined,
@@ -65,6 +74,7 @@ export function CreateIssueModal({
       };
       return api.createIssue(projectId, payload);
     },
+
     onSuccess: (newIssue) => {
       queryClient.invalidateQueries({ queryKey: ['issues', projectId] });
       // Reset form
