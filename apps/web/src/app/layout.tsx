@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   description: 'Manage projects, issues, sprints, and releases powered by native AI copilots.',
 };
 
+import { ReactQueryProvider } from '@/components/providers/query-provider';
+
 export default function RootLayout({
   children,
 }: {
@@ -14,7 +16,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen bg-background font-sans antialiased text-foreground">
-        {children}
+        <ReactQueryProvider>{children}</ReactQueryProvider>
       </body>
     </html>
   );
