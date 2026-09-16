@@ -11,8 +11,11 @@ import {
   User,
   RotateCcw,
 } from 'lucide-react';
-import { api, ParsedIssueDraft } from '@/lib/api';
+import { api, ParsedIssueDraft, CopilotWidget } from '@/lib/api';
 import { GenerativeIssueCard } from './generative-issue-card';
+import { GenerativeIssueList } from './generative-issue-list';
+import { GenerativeMetricsCard } from './generative-metrics-card';
+import { GenerativeMarkdown } from './generative-markdown';
 import { cn } from '@/lib/utils';
 
 interface ChatMessage {
@@ -20,6 +23,7 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content?: string;
   draft?: ParsedIssueDraft;
+  widget?: CopilotWidget;
   timestamp: Date;
 }
 
@@ -33,6 +37,7 @@ export function FloatingAiCopilot({
   onOpenIssueInDrawer,
 }: FloatingAiCopilotProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [inputPrompt, setInputPrompt] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -40,7 +45,7 @@ export function FloatingAiCopilot({
       id: 'welcome',
       role: 'assistant',
       content:
-        'Hi! I am your ProjectFlow AI Assistant. You can ask me questions about your project (e.g. *"how many tasks are pending?"*, *"what is in progress?"*) or ask me to draft a new task, bug, or story in plain language.',
+        'Hi! I am your ProjectFlow AI Assistant. You can ask me questions about your project (e.g. *"which issues are pending?"*, *"what are the completion and bug rates?"*) or ask me to draft a new task, bug, or story in plain language.',
       timestamp: new Date(),
     },
   ]);
@@ -83,6 +88,7 @@ export function FloatingAiCopilot({
         role: 'assistant',
         content: response.reply,
         draft: response.draft,
+        widget: response.widget,
         timestamp: new Date(),
       };
 
@@ -110,10 +116,10 @@ export function FloatingAiCopilot({
   };
 
   const samplePrompts = [
-    'How many tasks are currently pending?',
-    'What issues are in progress right now?',
+    'Which issues are currently pending?',
+    'What is our completion rate and bug rate?',
+    'Show all active bugs in the project',
     'Create a P0 bug: checkout button double-charges on mobile, estimate 3 hours',
-    'Task: Add Stripe webhook signature verification, 5 story points',
   ];
 
   return (
@@ -135,7 +141,14 @@ export function FloatingAiCopilot({
 
       {/* Expanded Modal Window */}
       {isOpen && (
-        <div className="fixed bottom-6 right-6 z-40 w-full max-w-[440px] h-[640px] max-h-[85vh] bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-in-right">
+        <div
+          className={cn(
+            'fixed bottom-6 right-6 z-40 bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-in-right transition-all duration-200',
+            isExpanded
+              ? 'w-[95vw] max-w-[640px] h-[740px] max-h-[90vh]'
+              : 'w-full max-w-[460px] h-[640px] max-h-[85vh]',
+          )}
+        >
           {/* Copilot Header */}
           <div className="h-14 px-4 border-b border-border flex items-center justify-between bg-card/80 backdrop-blur-md shrink-0">
             <div className="flex items-center gap-2.5">
@@ -154,13 +167,21 @@ export function FloatingAiCopilot({
             <div className="flex items-center gap-1">
               <button
                 type="button"
+                onClick={() => setIsExpanded(!isExpanded)}
+                title={isExpanded ? 'Collapse to Compact' : 'Expand Workspace'}
+                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                {isExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                type="button"
                 onClick={() =>
                   setMessages([
                     {
                       id: 'welcome',
                       role: 'assistant',
                       content:
-                        'Conversation cleared. What issue or workflow would you like to create next?',
+                        'Conversation cleared. What issue or metric would you like to explore next?',
                       timestamp: new Date(),
                     },
                   ])
@@ -212,11 +233,31 @@ export function FloatingAiCopilot({
                           : 'bg-muted/50 border border-border/80 text-foreground rounded-tl-none',
                       )}
                     >
-                      {msg.content}
+                      {msg.role === 'assistant' ? (
+                        <GenerativeMarkdown
+                          content={msg.content}
+                          onOpenIssue={onOpenIssueInDrawer}
+                        />
+                      ) : (
+                        msg.content
+                      )}
                     </div>
                   )}
 
-                  {/* Generative IssueCard Preview */}
+                  {/* Generative Issue List Widget */}
+                  {msg.widget && msg.widget.type === 'issue_list' && (
+                    <GenerativeIssueList
+                      widget={msg.widget}
+                      onOpenIssueInDrawer={onOpenIssueInDrawer}
+                    />
+                  )}
+
+                  {/* Generative Metrics Widget */}
+                  {msg.widget && msg.widget.type === 'metrics' && (
+                    <GenerativeMetricsCard widget={msg.widget} />
+                  )}
+
+                  {/* Generative IssueCard Proposal Preview */}
                   {msg.draft && (
                     <GenerativeIssueCard
                       projectId={projectId}
@@ -238,7 +279,7 @@ export function FloatingAiCopilot({
                 <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center">
                   <Sparkles className="h-3 w-3 text-primary animate-spin" />
                 </div>
-                <span>Thinking and analyzing project backlog...</span>
+                <span>Thinking and querying project backlog...</span>
               </div>
             )}
 
