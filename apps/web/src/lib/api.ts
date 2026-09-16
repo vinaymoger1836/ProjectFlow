@@ -7,6 +7,7 @@ import {
   CopilotIssueListWidget,
   CopilotMetricsWidget,
   CopilotIssueItem,
+  ParsedIssueDraft,
 } from '@projectflow/types';
 
 export type {
@@ -15,6 +16,7 @@ export type {
   CopilotIssueListWidget,
   CopilotMetricsWidget,
   CopilotIssueItem,
+  ParsedIssueDraft,
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
@@ -71,20 +73,6 @@ export interface ActivityItem {
     email: string;
     avatarUrl?: string | null;
   } | null;
-}
-
-
-export interface ParsedIssueDraft {
-  title: string;
-  type: IssueType;
-  priority: IssuePriority;
-  status: string;
-  estimateHours?: number | null;
-  storyPoints?: number | null;
-  description: string;
-  suggestedDueDate?: string | null;
-  explanation: string;
-  modelUsed: string;
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {

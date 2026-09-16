@@ -230,22 +230,25 @@ export interface CopilotMetricsWidget {
 
 export type CopilotWidget = CopilotIssueListWidget | CopilotMetricsWidget;
 
+export interface ParsedIssueDraft {
+  title: string;
+  type: IssueType;
+  priority: IssuePriority;
+  status: string;
+  estimateHours?: number | null;
+  storyPoints?: number | null;
+  description: string;
+  suggestedDueDate?: string | null;
+  explanation: string;
+  modelUsed: string;
+}
+
 export interface CopilotChatResponse {
   intent: 'chat' | 'create_issue';
   reply: string;
   widget?: CopilotWidget;
-  draft?: {
-    title: string;
-    type: IssueType;
-    priority: IssuePriority;
-    status: string;
-    estimateHours?: number | null;
-    storyPoints?: number | null;
-    description: string;
-    suggestedDueDate?: string | null;
-    explanation?: string;
-    modelUsed?: string;
-  };
+  draft?: ParsedIssueDraft;
   modelUsed: string;
 }
+
 
