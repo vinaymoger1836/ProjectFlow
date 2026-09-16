@@ -243,9 +243,71 @@ export interface ParsedIssueDraft {
   modelUsed: string;
 }
 
+export interface CopilotStatCard {
+  label: string;
+  value: string | number;
+  variant?: 'default' | 'healthy' | 'warning' | 'critical' | 'primary';
+  subtext?: string;
+  icon?: 'check' | 'bug' | 'clock' | 'trending' | 'alert' | 'user' | 'target' | 'activity';
+}
+
+export interface CopilotStatGridBlock {
+  type: 'stat_grid';
+  title?: string;
+  stats: CopilotStatCard[];
+}
+
+export interface CopilotChartDataPoint {
+  label: string;
+  value: number;
+  color?: string;
+  secondaryValue?: number;
+}
+
+export interface CopilotChartBlock {
+  type: 'chart';
+  chartType: 'pie' | 'bar' | 'line';
+  title: string;
+  subtitle?: string;
+  data: CopilotChartDataPoint[];
+  total?: number;
+  unit?: string;
+}
+
+export interface CopilotTableBlock {
+  type: 'table';
+  title: string;
+  totalCount?: number;
+  issues: CopilotIssueItem[];
+}
+
+export interface CopilotProfileCardBlock {
+  type: 'profile_card';
+  title: string;
+  subtitle?: string;
+  avatarText?: string;
+  avatarUrl?: string | null;
+  badgeText?: string;
+}
+
+export interface CopilotProposalBlock {
+  type: 'proposal_card';
+  draft: ParsedIssueDraft;
+}
+
+export type GenerativeBlock =
+  | CopilotStatGridBlock
+  | CopilotChartBlock
+  | CopilotTableBlock
+  | CopilotProfileCardBlock
+  | CopilotProposalBlock
+  | CopilotIssueListWidget
+  | CopilotMetricsWidget;
+
 export interface CopilotChatResponse {
   intent: 'chat' | 'create_issue';
   reply: string;
+  blocks?: GenerativeBlock[];
   widget?: CopilotWidget;
   draft?: ParsedIssueDraft;
   modelUsed: string;

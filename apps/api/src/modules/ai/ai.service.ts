@@ -28,6 +28,7 @@ import {
   CopilotWidget,
   CopilotIssueListWidget,
   CopilotMetricsWidget,
+  GenerativeBlock,
 } from '@projectflow/types';
 
 export interface ParsedIssueDraft {
@@ -867,7 +868,10 @@ ${JSON.stringify(candidateSummary, null, 2)}`;
       lowerPrompt.includes('percent') ||
       lowerPrompt.includes('health') ||
       lowerPrompt.includes('analytics') ||
-      lowerPrompt.includes('progress');
+      (lowerPrompt.includes('progress') &&
+        !lowerPrompt.includes('in progress') &&
+        !lowerPrompt.includes('in-progress') &&
+        !lowerPrompt.includes('in_progress'));
 
     const isIssueListIntent =
       lowerPrompt.includes('pending') ||
@@ -880,8 +884,186 @@ ${JSON.stringify(candidateSummary, null, 2)}`;
       lowerPrompt.includes('in progress') ||
       lowerPrompt.includes('bugs') ||
       lowerPrompt.includes('todo') ||
+      lowerPrompt.includes('assigned') ||
+      lowerPrompt.includes('assiged') ||
       lowerPrompt === 'what' ||
       lowerPrompt === 'what are the issues';
+
+    const resolveRelevantIssues = (
+      promptText: string,
+      replyText: string = '',
+      explicitKeys?: string[],
+      explicitTitle?: string,
+      explicitFilter?: string,
+    ): { filtered: typeof items; title: string; filter: string } => {
+      const lowerPromptText = promptText.toLowerCase();
+
+      // 1. Explicit keys from LLM (if valid and match any real issues)
+      if (Array.isArray(explicitKeys) && explicitKeys.length > 0) {
+        const keySet = new Set(explicitKeys.map((k) => k.trim().toUpperCase()));
+        const matched = items.filter((i) => keySet.has(i.issueKey.toUpperCase()));
+        if (matched.length > 0) {
+          const title =
+            explicitTitle ||
+            (matched.length === 1 ? `Issue ${matched[0].issueKey}` : `Selected Issues (${matched.length})`);
+          return { filtered: matched, title, filter: explicitFilter || 'selected' };
+        }
+      }
+
+      // 2. Mention of specific issue keys in prompt or reply (e.g. PAY-1, [PAY-3])
+      const keyRegex = new RegExp(`\\b(${project.key}-\\d+)\\b`, 'gi');
+      const keysInPrompt = Array.from(promptText.matchAll(keyRegex)).map((m) => m[1].toUpperCase());
+      const keysInReply = Array.from(replyText.matchAll(keyRegex)).map((m) => m[1].toUpperCase());
+      const referencedKeys = Array.from(new Set([...keysInPrompt, ...keysInReply]));
+
+      if (referencedKeys.length > 0) {
+        const matched = items.filter((i) => referencedKeys.includes(i.issueKey.toUpperCase()));
+        if (matched.length > 0) {
+          const title =
+            explicitTitle ||
+            (matched.length === 1 ? `Issue ${matched[0].issueKey}` : `Referenced Issues (${matched.length})`);
+          return { filtered: matched, title, filter: explicitFilter || 'referenced' };
+        }
+      }
+
+      // 3. Multi-attribute entity matching (Assignee, Priority, Type, Status)
+      let matchedAssigneeName: string | null = null;
+      let isUnassignedQuery = false;
+
+      if (lowerPromptText.includes('unassigned')) {
+        isUnassignedQuery = true;
+      } else {
+        const assigneesWithIssues = new Map<string, string>();
+        for (const item of items) {
+          if (item.assignee?.name) {
+            assigneesWithIssues.set(item.assignee.name.toLowerCase(), item.assignee.name);
+          }
+        }
+
+        for (const [lowerName, displayName] of assigneesWithIssues.entries()) {
+          const parts = lowerName.split(/\s+/).filter((p) => p.length >= 4);
+          if (lowerPromptText.includes(lowerName) || parts.some((p) => lowerPromptText.includes(p))) {
+            matchedAssigneeName = displayName;
+            break;
+          }
+        }
+      }
+
+      // Target priority
+      let targetPriority: string | null = null;
+      if (lowerPromptText.includes('p0') || lowerPromptText.includes('urgent') || lowerPromptText.includes('critical') || explicitFilter === 'p0') {
+        targetPriority = 'P0';
+      } else if (lowerPromptText.includes('p1') || lowerPromptText.includes('high priority') || explicitFilter === 'p1') {
+        targetPriority = 'P1';
+      } else if (lowerPromptText.includes('p2') || lowerPromptText.includes('medium priority') || explicitFilter === 'p2') {
+        targetPriority = 'P2';
+      } else if (lowerPromptText.includes('p3') || lowerPromptText.includes('low priority') || explicitFilter === 'p3') {
+        targetPriority = 'P3';
+      }
+
+      // Target type
+      let targetType: string | null = null;
+      if (lowerPromptText.includes('bug') || explicitFilter === 'bugs') {
+        targetType = 'BUG';
+      } else if (lowerPromptText.includes('story') || lowerPromptText.includes('stories') || explicitFilter === 'stories') {
+        targetType = 'STORY';
+      } else if (lowerPromptText.includes('epic') || lowerPromptText.includes('epics') || explicitFilter === 'epics') {
+        targetType = 'EPIC';
+      } else if (lowerPromptText.includes('task') || lowerPromptText.includes('tasks') || explicitFilter === 'tasks') {
+        targetType = 'TASK';
+      }
+
+      // Target status
+      let targetStatus: string | null = null;
+      if (lowerPromptText.includes('in progress') || lowerPromptText.includes('ongoing') || explicitFilter === 'in_progress') {
+        targetStatus = 'IN_PROGRESS';
+      } else if (lowerPromptText.includes('in review') || lowerPromptText.includes('review') || explicitFilter === 'in_review') {
+        targetStatus = 'IN_REVIEW';
+      } else if (
+        lowerPromptText.includes('completed') ||
+        lowerPromptText.includes('done') ||
+        lowerPromptText.includes('finished') ||
+        lowerPromptText.includes('closed') ||
+        explicitFilter === 'done'
+      ) {
+        targetStatus = 'DONE';
+      } else if (lowerPromptText.includes('todo') || lowerPromptText.includes('to do') || explicitFilter === 'todo') {
+        targetStatus = 'TODO';
+      } else if (lowerPromptText.includes('backlog') || explicitFilter === 'backlog') {
+        targetStatus = 'BACKLOG';
+      }
+
+      const hasSpecificEntity =
+        isUnassignedQuery ||
+        matchedAssigneeName !== null ||
+        targetPriority !== null ||
+        targetType !== null ||
+        targetStatus !== null;
+
+      if (hasSpecificEntity) {
+        let filtered = items;
+
+        if (isUnassignedQuery) {
+          filtered = filtered.filter((i) => !i.assignee);
+        } else if (matchedAssigneeName) {
+          const lower = matchedAssigneeName.toLowerCase();
+          filtered = filtered.filter((i) => i.assignee?.name && i.assignee.name.toLowerCase().includes(lower));
+        }
+
+        if (targetPriority) {
+          filtered = filtered.filter((i) => i.priority === targetPriority);
+        }
+
+        if (targetType) {
+          filtered = filtered.filter((i) => i.type === targetType);
+        }
+
+        if (targetStatus) {
+          filtered = filtered.filter((i) => i.status === targetStatus);
+        }
+
+        let title = '';
+        if (matchedAssigneeName) {
+          const typeStr = targetType ? ` ${targetType === 'BUG' ? 'Bugs' : targetType.toLowerCase() + 's'}` : ' Issues';
+          title = `${typeStr.trim()} Assigned to ${matchedAssigneeName} (${filtered.length})`;
+        } else if (isUnassignedQuery) {
+          title = `Unassigned Issues (${filtered.length})`;
+        } else if (targetPriority && targetType) {
+          title = `${targetPriority} ${targetType === 'BUG' ? 'Bugs' : targetType.toLowerCase() + 's'} (${filtered.length})`;
+        } else if (targetPriority) {
+          title = `${targetPriority} Priority Issues (${filtered.length})`;
+        } else if (targetType) {
+          title = targetType === 'BUG' ? `Project Bugs (${filtered.length})` : `${targetType}s (${filtered.length})`;
+        } else if (targetStatus) {
+          if (targetStatus === 'IN_PROGRESS') title = `Issues In Progress (${filtered.length})`;
+          else if (targetStatus === 'IN_REVIEW') title = `Issues In Review (${filtered.length})`;
+          else if (targetStatus === 'DONE') title = `Completed Issues (${filtered.length})`;
+          else if (targetStatus === 'TODO') title = `To Do Backlog (${filtered.length})`;
+          else if (targetStatus === 'BACKLOG') title = `Backlog Items (${filtered.length})`;
+          else title = `Issues (${filtered.length})`;
+        } else {
+          title = `Matching Issues (${filtered.length})`;
+        }
+
+        if (explicitTitle) {
+          title = explicitTitle.includes('(') ? explicitTitle : `${explicitTitle} (${filtered.length})`;
+        }
+
+        return {
+          filtered,
+          title,
+          filter: explicitFilter || 'filtered',
+        };
+      }
+
+      // Default: Pending / Active issues (exclude DONE)
+      const pendingItems = items.filter((i) => i.status !== 'DONE');
+      return {
+        filtered: pendingItems,
+        title: explicitTitle || `Pending Issues (${pendingItems.length})`,
+        filter: explicitFilter || 'pending',
+      };
+    };
 
     const groqKey = this.configService.get<string>('GROQ_API_KEY');
     const geminiKey = this.configService.get<string>('GEMINI_API_KEY');
@@ -922,15 +1104,19 @@ Your response should be concise, professional, and trigger interactive Generativ
        "widget": "metrics"
      }
 
-   - When the user asks which issues are pending, what is in progress, list of bugs, what are they, show tasks, or asks about specific items:
+   - When the user asks about specific issues, people, tasks, or bugs (e.g. "how many issues are assigned to Michael Scott?", "show Sarah's tasks", "what are P0 issues?", "which issues are pending?"):
      Set "widget": "issue_list".
-     Filter options: "pending" | "in_progress" | "bugs" | "todo" | "done" | "all".
+     CRITICAL: In "selectedKeys", provide an array containing ONLY the exact issue keys that directly answer the query!
+     - e.g. "issues assigned to Michael Scott": "selectedKeys": ["PAY-3"], "title": "Issues Assigned to Michael Scott"
+     - e.g. "what are P0 issues?": "selectedKeys": ["PAY-1", "PAY-6"], "title": "P0 Urgent Issues"
+     - e.g. "all pending issues": "selectedKeys": ["PAY-1", "PAY-2", ...], "title": "Pending Issues"
      JSON format:
      {
        "intent": "chat",
-       "reply": "Here are the pending issues in the project:",
+       "reply": "Michael Scott is currently assigned to 1 issue ([PAY-3]).",
        "widget": "issue_list",
-       "filter": "pending"
+       "title": "Issues Assigned to Michael Scott",
+       "selectedKeys": ["PAY-3"]
      }
 
    - For general conversational questions, tips, or guidance:
@@ -1033,32 +1219,25 @@ Return ONLY a valid JSON object matching one of the formats above. No markdown f
             if (parsed.intent === 'chat' && parsed.reply) {
               let widget: CopilotWidget | undefined;
 
-              if (parsed.widget === 'metrics' || isMetricsIntent) {
+              if (parsed.widget === 'issue_list') {
+                const { filtered, title, filter } = resolveRelevantIssues(
+                  dto.prompt,
+                  parsed.reply,
+                  parsed.selectedKeys,
+                  parsed.title,
+                  parsed.filter,
+                );
+                widget = buildIssueListWidget(title, filter, filtered);
+              } else if (parsed.widget === 'metrics' || isMetricsIntent) {
                 widget = metricsWidget;
-              } else if (parsed.widget === 'issue_list' || isIssueListIntent) {
-                const filter = parsed.filter || 'pending';
-                let filtered = items;
-                let title = `Pending Issues (${pendingCount})`;
-
-                if (Array.isArray(parsed.selectedKeys) && parsed.selectedKeys.length > 0) {
-                  filtered = items.filter((i) => parsed.selectedKeys.includes(i.issueKey));
-                  title = `Selected Issues (${filtered.length})`;
-                } else if (filter === 'in_progress') {
-                  filtered = items.filter((i) => i.status === 'IN_PROGRESS');
-                  title = `Issues In Progress (${filtered.length})`;
-                } else if (filter === 'bugs') {
-                  filtered = items.filter((i) => i.type === 'BUG');
-                  title = `Project Bugs (${filtered.length})`;
-                } else if (filter === 'todo') {
-                  filtered = items.filter((i) => i.status === 'TODO');
-                  title = `To Do Backlog (${filtered.length})`;
-                } else if (filter === 'done') {
-                  filtered = items.filter((i) => i.status === 'DONE');
-                  title = `Completed Issues (${filtered.length})`;
-                } else {
-                  filtered = items.filter((i) => i.status !== 'DONE');
-                }
-
+              } else if (isIssueListIntent) {
+                const { filtered, title, filter } = resolveRelevantIssues(
+                  dto.prompt,
+                  parsed.reply,
+                  parsed.selectedKeys,
+                  parsed.title,
+                  parsed.filter,
+                );
                 widget = buildIssueListWidget(title, filter, filtered);
               }
 
@@ -1096,24 +1275,28 @@ Return ONLY a valid JSON object matching one of the formats above. No markdown f
       };
     }
 
-    if (!isCreationIntent && (isIssueListIntent || lowerPrompt.includes('count') || lowerPrompt.includes('status'))) {
-      let filtered = items.filter((i) => i.status !== 'DONE');
-      let title = `Pending Issues (${filtered.length})`;
-      let filter = 'pending';
-
-      if (lowerPrompt.includes('bug')) {
-        filtered = items.filter((i) => i.type === 'BUG');
-        title = `Project Bugs (${filtered.length})`;
-        filter = 'bugs';
-      } else if (lowerPrompt.includes('in progress')) {
-        filtered = items.filter((i) => i.status === 'IN_PROGRESS');
-        title = `Issues In Progress (${filtered.length})`;
-        filter = 'in_progress';
+    if (
+      !isCreationIntent &&
+      (isIssueListIntent ||
+        lowerPrompt.includes('count') ||
+        lowerPrompt.includes('status') ||
+        lowerPrompt.includes('assigned') ||
+        lowerPrompt.includes('assiged'))
+    ) {
+      const { filtered, title, filter } = resolveRelevantIssues(dto.prompt, '');
+      let reply = `Here are the active issues in **${project.name}**:`;
+      if (filtered.length === 1) {
+        const single = filtered[0];
+        reply = `Found 1 matching issue: **[${single.issueKey}] ${single.title}** (Status: ${single.status}, Priority: ${single.priority}, Assignee: ${single.assignee?.name || 'Unassigned'}).`;
+      } else if (filtered.length === 0) {
+        reply = `No matching issues found for that query in **${project.name}**.`;
+      } else {
+        reply = `Found ${filtered.length} matching issues in **${project.name}**:`;
       }
 
       return {
         intent: 'chat',
-        reply: `Here are the active issues in **${project.name}**:`,
+        reply,
         widget: buildIssueListWidget(title, filter, filtered),
         modelUsed: 'heuristic-backlog',
       };

@@ -11,7 +11,8 @@ import {
   PanelRightClose,
   HelpCircle,
 } from 'lucide-react';
-import { api, ParsedIssueDraft, CopilotWidget } from '@/lib/api';
+import { api, ParsedIssueDraft, CopilotWidget, GenerativeBlock } from '@/lib/api';
+import { GenerativeBlockRenderer } from './primitives/generative-block-renderer';
 import { GenerativeIssueCard } from './generative-issue-card';
 import { GenerativeIssueList } from './generative-issue-list';
 import { GenerativeMetricsCard } from './generative-metrics-card';
@@ -24,6 +25,7 @@ interface ChatMessage {
   content?: string;
   draft?: ParsedIssueDraft;
   widget?: CopilotWidget;
+  blocks?: GenerativeBlock[];
   timestamp: Date;
 }
 
@@ -87,6 +89,7 @@ export function AiCopilotSideDrawer({
         content: response.reply,
         draft: response.draft,
         widget: response.widget,
+        blocks: response.blocks,
         timestamp: new Date(),
       };
 
@@ -211,21 +214,31 @@ export function AiCopilotSideDrawer({
                 </div>
               )}
 
-              {/* Generative Issue List Widget */}
-              {msg.widget && msg.widget.type === 'issue_list' && (
-                <GenerativeIssueList
-                  widget={msg.widget}
+              {/* Composable Generative Blocks (Cards, Charts, Tables) */}
+              {msg.blocks && msg.blocks.length > 0 && (
+                <div className="space-y-2">
+                  {msg.blocks.map((block, bIdx) => (
+                    <GenerativeBlockRenderer
+                      key={`block-${bIdx}`}
+                      block={block}
+                      projectId={projectId}
+                      onOpenIssueInDrawer={onOpenIssueInDrawer}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Backwards-compatible Single Widget fallback */}
+              {(!msg.blocks || msg.blocks.length === 0) && msg.widget && (
+                <GenerativeBlockRenderer
+                  block={msg.widget}
+                  projectId={projectId}
                   onOpenIssueInDrawer={onOpenIssueInDrawer}
                 />
               )}
 
-              {/* Generative Metrics Widget */}
-              {msg.widget && msg.widget.type === 'metrics' && (
-                <GenerativeMetricsCard widget={msg.widget} />
-              )}
-
               {/* Generative IssueCard Proposal Preview */}
-              {msg.draft && (
+              {(!msg.blocks || msg.blocks.length === 0) && msg.draft && (
                 <GenerativeIssueCard
                   projectId={projectId}
                   initialDraft={msg.draft}
