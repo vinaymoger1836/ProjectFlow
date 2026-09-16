@@ -208,11 +208,11 @@ function HomePageContent() {
 
       {/* Main Workspace + Copilot Split View Container */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Main Workspace Area: Takes 70% when copilot is open, 100% when closed */}
+        {/* Main Workspace Area: Takes 55% when copilot is open, 100% when closed */}
         <main
           className={cn(
             'flex flex-col overflow-hidden transition-all duration-300 ease-in-out',
-            isCopilotOpen ? 'w-full lg:w-[70%] shrink-0' : 'w-full flex-1',
+            isCopilotOpen ? 'w-full lg:w-[55%] shrink-0' : 'w-full flex-1',
           )}
         >
           {/* Top Navbar */}
@@ -245,7 +245,7 @@ function HomePageContent() {
                     ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20',
                 )}
-                title={isCopilotOpen ? 'Close AI Copilot Side Drawer' : 'Open AI Copilot (30% Side Drawer)'}
+                title={isCopilotOpen ? 'Close AI Copilot Side Drawer' : 'Open AI Copilot (45% Side Drawer)'}
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 <span>AI Copilot</span>
@@ -430,12 +430,12 @@ function HomePageContent() {
         </div>
       </main>
 
-      {/* AI Copilot Side Drawer (occupies 30% of workspace width, pushes main to 70%) */}
+      {/* AI Copilot Side Drawer (occupies 45% of workspace width, pushes main to 55%) */}
       {isCopilotOpen && (
         <aside
           className={cn(
             'border-l border-border bg-card flex flex-col h-full overflow-hidden transition-all duration-300 ease-in-out shrink-0 animate-slide-in-right z-20',
-            'w-full lg:w-[30%] min-w-[340px] max-w-[560px]',
+            'w-full lg:w-[45%] min-w-[380px]',
           )}
         >
           <AiCopilotSideDrawer

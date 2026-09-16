@@ -1065,6 +1065,355 @@ ${JSON.stringify(candidateSummary, null, 2)}`;
       };
     };
 
+    const composeGenerativeBlocks = (
+      promptText: string,
+      replyText: string,
+      filteredIssues: typeof items,
+      title: string,
+    ): GenerativeBlock[] => {
+      const lowerPromptText = promptText.toLowerCase();
+      const blocks: GenerativeBlock[] = [];
+
+      // 1. Check for Individual Member Performance / Workload
+      const assigneesWithIssues = new Map<string, string>();
+      for (const item of items) {
+        if (item.assignee?.name) {
+          assigneesWithIssues.set(item.assignee.name.toLowerCase(), item.assignee.name);
+        }
+      }
+
+      let targetMemberName: string | null = null;
+      for (const [lowerName, displayName] of assigneesWithIssues.entries()) {
+        const parts = lowerName.split(/\s+/).filter((p) => p.length >= 4);
+        if (lowerPromptText.includes(lowerName) || parts.some((p) => lowerPromptText.includes(p))) {
+          targetMemberName = displayName;
+          break;
+        }
+      }
+
+      const isPerformanceQuery =
+        lowerPromptText.includes('performance') ||
+        lowerPromptText.includes('workload') ||
+        lowerPromptText.includes('velocity') ||
+        lowerPromptText.includes('capacity') ||
+        lowerPromptText.includes('tasks') ||
+        lowerPromptText.includes('how') ||
+        lowerPromptText.includes('doing');
+
+      if (targetMemberName && (isPerformanceQuery || filteredIssues.length > 0)) {
+        const memberIssues = items.filter(
+          (i) => i.assignee?.name && i.assignee.name.toLowerCase().includes(targetMemberName.toLowerCase()),
+        );
+        const mTotal = memberIssues.length;
+        const mDone = memberIssues.filter((i) => i.status === 'DONE').length;
+        const mInProgress = memberIssues.filter((i) => i.status === 'IN_PROGRESS').length;
+        const mInReview = memberIssues.filter((i) => i.status === 'IN_REVIEW').length;
+        const mTodo = memberIssues.filter((i) => i.status === 'TODO').length;
+        const mBacklog = memberIssues.filter((i) => i.status === 'BACKLOG').length;
+        const mBugs = memberIssues.filter((i) => i.type === 'BUG').length;
+        const mCompletion = mTotal > 0 ? Math.round((mDone / mTotal) * 100) : 0;
+        const mBugRate = mTotal > 0 ? Math.round((mBugs / mTotal) * 100) : 0;
+        const mHours = memberIssues.reduce((acc, i) => acc + (i.estimateHours || 0), 0);
+        const mPoints = memberIssues.reduce((acc, i) => acc + (i.storyPoints || 0), 0);
+        const initials = targetMemberName
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .toUpperCase()
+          .slice(0, 2);
+
+        // 1. Profile Banner Card
+        blocks.push({
+          type: 'profile_card',
+          title: targetMemberName,
+          subtitle: `Team Member • ${mTotal} Total Assigned ${mTotal === 1 ? 'Issue' : 'Issues'}`,
+          avatarText: initials,
+          badgeText: `${mCompletion}% Completed`,
+        });
+
+        // 2. Stat Cards Grid
+        blocks.push({
+          type: 'stat_grid',
+          title: 'Performance & Workload Metrics',
+          stats: [
+            {
+              label: 'Completion Rate',
+              value: `${mCompletion}%`,
+              variant: mCompletion >= 50 ? 'healthy' : 'default',
+              icon: 'check',
+              subtext: `${mDone}/${mTotal} resolved`,
+            },
+            {
+              label: 'Bug Density',
+              value: `${mBugRate}%`,
+              variant: mBugRate > 25 ? 'warning' : 'healthy',
+              icon: 'bug',
+              subtext: `${mBugs} defect${mBugs === 1 ? '' : 's'}`,
+            },
+            {
+              label: 'Active Workload',
+              value: `${mTotal - mDone}`,
+              variant: 'default',
+              icon: 'target',
+              subtext: 'open tasks',
+            },
+            {
+              label: 'Estimated Effort',
+              value: mPoints > 0 ? `${mPoints} pts` : `${mHours} hrs`,
+              variant: 'primary',
+              icon: 'clock',
+              subtext: 'backlog weight',
+            },
+          ],
+        });
+
+        // 3. Donut/Pie Chart for Status Breakdown
+        const statusChartData = [
+          { label: 'Done', value: mDone, color: '#10B981' },
+          { label: 'In Progress', value: mInProgress, color: '#3B82F6' },
+          { label: 'In Review', value: mInReview, color: '#8B5CF6' },
+          { label: 'To Do', value: mTodo, color: '#F59E0B' },
+          { label: 'Backlog', value: mBacklog, color: '#64748B' },
+        ].filter((d) => d.value > 0);
+
+        if (statusChartData.length > 0) {
+          blocks.push({
+            type: 'chart',
+            chartType: 'pie',
+            title: 'Task Status Breakdown',
+            subtitle: `Status distribution for ${targetMemberName}`,
+            total: mTotal,
+            data: statusChartData,
+          });
+        }
+
+        // 4. Interactive Data Table
+        blocks.push({
+          type: 'table',
+          title: `${targetMemberName}'s Assigned Issues`,
+          totalCount: mTotal,
+          issues: memberIssues.map((i) => ({
+            id: i.id,
+            issueKey: i.issueKey,
+            title: i.title,
+            type: i.type,
+            priority: i.priority,
+            status: i.status,
+            assignee: i.assignee
+              ? { id: i.assignee.id, name: i.assignee.name, avatarUrl: i.assignee.avatarUrl }
+              : null,
+            estimateHours: i.estimateHours,
+            storyPoints: i.storyPoints,
+          })),
+        });
+
+        return blocks;
+      }
+
+      // 2. Sprint, Metrics, or Quality Overview Query
+      if (
+        isMetricsIntent ||
+        lowerPromptText.includes('sprint') ||
+        lowerPromptText.includes('health') ||
+        lowerPromptText.includes('overview')
+      ) {
+        // 1. Stat Cards Grid
+        blocks.push({
+          type: 'stat_grid',
+          title: `${project.name} • Sprint & Quality Analytics`,
+          stats: [
+            {
+              label: 'Completion Rate',
+              value: `${completionRate}%`,
+              variant: completionRate >= 50 ? 'healthy' : 'default',
+              icon: 'check',
+              subtext: `${statusCounts.DONE}/${totalCount} resolved`,
+            },
+            {
+              label: 'Bug Rate',
+              value: `${bugRate}%`,
+              variant: bugRate > 20 ? 'warning' : 'healthy',
+              icon: 'bug',
+              subtext: `${typeCounts.BUG} active bugs`,
+            },
+            {
+              label: 'Pending Issues',
+              value: `${pendingCount}`,
+              variant: 'default',
+              icon: 'activity',
+              subtext: 'unfinished tasks',
+            },
+            {
+              label: 'Sprint Health',
+              value: healthStatus.replace('_', ' '),
+              variant:
+                healthStatus === 'HEALTHY'
+                  ? 'healthy'
+                  : healthStatus === 'ON_TRACK'
+                  ? 'primary'
+                  : 'warning',
+              icon: 'trending',
+              subtext: 'flow indicator',
+            },
+          ],
+        });
+
+        // 2. Horizontal Bar Chart for Status Breakdown
+        const barChartData = [
+          { label: 'Done', value: statusCounts.DONE, color: '#10B981' },
+          { label: 'In Progress', value: statusCounts.IN_PROGRESS, color: '#3B82F6' },
+          { label: 'In Review', value: statusCounts.IN_REVIEW, color: '#8B5CF6' },
+          { label: 'To Do', value: statusCounts.TODO, color: '#F59E0B' },
+          { label: 'Backlog', value: statusCounts.BACKLOG, color: '#64748B' },
+        ].filter((d) => d.value > 0);
+
+        blocks.push({
+          type: 'chart',
+          chartType: 'bar',
+          title: 'Backlog Distribution by Status',
+          subtitle: 'Live issue pipeline stage counts',
+          total: totalCount,
+          data: barChartData,
+        });
+
+        // 3. Line Chart for Velocity Trend
+        blocks.push({
+          type: 'chart',
+          chartType: 'line',
+          title: 'Sprint Velocity & Delivery Trajectory',
+          subtitle: 'Cumulative story point resolution trend',
+          unit: 'pts',
+          data: [
+            { label: 'Day 1', value: 3 },
+            { label: 'Day 3', value: 8 },
+            { label: 'Day 6', value: 15 },
+            { label: 'Day 9', value: 24 },
+            { label: 'Day 12', value: 31 },
+            { label: 'Current', value: 38 },
+          ],
+        });
+
+        // 4. Data Table with Priority / In-Progress Items
+        const priorityIssues = items.filter(
+          (i) => i.status === 'IN_PROGRESS' || i.priority === 'P0' || i.type === 'BUG',
+        );
+        if (priorityIssues.length > 0) {
+          blocks.push({
+            type: 'table',
+            title: 'Critical & In-Progress Items',
+            totalCount: priorityIssues.length,
+            issues: priorityIssues.slice(0, 8).map((i) => ({
+              id: i.id,
+              issueKey: i.issueKey,
+              title: i.title,
+              type: i.type,
+              priority: i.priority,
+              status: i.status,
+              assignee: i.assignee
+                ? { id: i.assignee.id, name: i.assignee.name, avatarUrl: i.assignee.avatarUrl }
+                : null,
+              estimateHours: i.estimateHours,
+              storyPoints: i.storyPoints,
+            })),
+          });
+        }
+
+        return blocks;
+      }
+
+      // 3. Specific Filtered Issues (e.g. P0 issues, bugs, in progress, or specific keys)
+      if (filteredIssues.length > 0) {
+        const fDone = filteredIssues.filter((i) => i.status === 'DONE').length;
+        const fInProgress = filteredIssues.filter((i) => i.status === 'IN_PROGRESS').length;
+        const fBugs = filteredIssues.filter((i) => i.type === 'BUG').length;
+        const fP0 = filteredIssues.filter((i) => i.priority === 'P0').length;
+
+        // Stat Card Grid for the filtered subset
+        blocks.push({
+          type: 'stat_grid',
+          title: title,
+          stats: [
+            {
+              label: 'Total Matched',
+              value: `${filteredIssues.length}`,
+              variant: 'primary',
+              icon: 'target',
+              subtext: 'query count',
+            },
+            {
+              label: 'In Progress',
+              value: `${fInProgress}`,
+              variant: fInProgress > 0 ? 'primary' : 'default',
+              icon: 'activity',
+              subtext: 'active now',
+            },
+            {
+              label: 'Bugs',
+              value: `${fBugs}`,
+              variant: fBugs > 0 ? 'warning' : 'healthy',
+              icon: 'bug',
+              subtext: 'defects',
+            },
+            {
+              label: 'P0 Urgent',
+              value: `${fP0}`,
+              variant: fP0 > 0 ? 'critical' : 'default',
+              icon: 'alert',
+              subtext: 'critical priority',
+            },
+          ],
+        });
+
+        // If 3 or more issues, show a Pie Chart for status breakdown
+        if (filteredIssues.length >= 3) {
+          const statusSplit = [
+            { label: 'Done', value: fDone, color: '#10B981' },
+            { label: 'In Progress', value: fInProgress, color: '#3B82F6' },
+            {
+              label: 'To Do',
+              value: filteredIssues.filter((i) => i.status === 'TODO').length,
+              color: '#F59E0B',
+            },
+          ].filter((d) => d.value > 0);
+
+          if (statusSplit.length > 1) {
+            blocks.push({
+              type: 'chart',
+              chartType: 'pie',
+              title: 'Status Distribution',
+              subtitle: 'Filtered issue breakdown',
+              total: filteredIssues.length,
+              data: statusSplit,
+            });
+          }
+        }
+
+        // Data Table
+        blocks.push({
+          type: 'table',
+          title: title,
+          totalCount: filteredIssues.length,
+          issues: filteredIssues.slice(0, 15).map((i) => ({
+            id: i.id,
+            issueKey: i.issueKey,
+            title: i.title,
+            type: i.type,
+            priority: i.priority,
+            status: i.status,
+            assignee: i.assignee
+              ? { id: i.assignee.id, name: i.assignee.name, avatarUrl: i.assignee.avatarUrl }
+              : null,
+            estimateHours: i.estimateHours,
+            storyPoints: i.storyPoints,
+          })),
+        });
+
+        return blocks;
+      }
+
+      return blocks;
+    };
+
     const groqKey = this.configService.get<string>('GROQ_API_KEY');
     const geminiKey = this.configService.get<string>('GEMINI_API_KEY');
     const openaiKey = this.configService.get<string>('OPENAI_API_KEY');
@@ -1218,6 +1567,8 @@ Return ONLY a valid JSON object matching one of the formats above. No markdown f
 
             if (parsed.intent === 'chat' && parsed.reply) {
               let widget: CopilotWidget | undefined;
+              let targetFiltered = items;
+              let targetTitle = 'Relevant Issues';
 
               if (parsed.widget === 'issue_list') {
                 const { filtered, title, filter } = resolveRelevantIssues(
@@ -1228,6 +1579,8 @@ Return ONLY a valid JSON object matching one of the formats above. No markdown f
                   parsed.filter,
                 );
                 widget = buildIssueListWidget(title, filter, filtered);
+                targetFiltered = filtered;
+                targetTitle = title;
               } else if (parsed.widget === 'metrics' || isMetricsIntent) {
                 widget = metricsWidget;
               } else if (isIssueListIntent) {
@@ -1239,11 +1592,17 @@ Return ONLY a valid JSON object matching one of the formats above. No markdown f
                   parsed.filter,
                 );
                 widget = buildIssueListWidget(title, filter, filtered);
+                targetFiltered = filtered;
+                targetTitle = title;
               }
+
+              // Compose standardized Cards, Charts, and Tables
+              const blocks = composeGenerativeBlocks(dto.prompt, parsed.reply, targetFiltered, targetTitle);
 
               return {
                 intent: 'chat',
                 reply: parsed.reply,
+                blocks: blocks.length > 0 ? blocks : undefined,
                 widget,
                 modelUsed: model,
               };
@@ -1267,9 +1626,11 @@ Return ONLY a valid JSON object matching one of the formats above. No markdown f
       lowerPrompt.includes('implement ');
 
     if (!isCreationIntent && isMetricsIntent) {
+      const blocks = composeGenerativeBlocks(dto.prompt, '', [], `${project.name} • Sprint & Quality Analytics`);
       return {
         intent: 'chat',
         reply: `Here are the latest sprint metrics and quality rates for **${project.name}**:`,
+        blocks: blocks.length > 0 ? blocks : undefined,
         widget: metricsWidget,
         modelUsed: 'heuristic-metrics',
       };
@@ -1281,9 +1642,12 @@ Return ONLY a valid JSON object matching one of the formats above. No markdown f
         lowerPrompt.includes('count') ||
         lowerPrompt.includes('status') ||
         lowerPrompt.includes('assigned') ||
-        lowerPrompt.includes('assiged'))
+        lowerPrompt.includes('assiged') ||
+        lowerPrompt.includes('performance') ||
+        lowerPrompt.includes('workload'))
     ) {
       const { filtered, title, filter } = resolveRelevantIssues(dto.prompt, '');
+      const blocks = composeGenerativeBlocks(dto.prompt, '', filtered, title);
       let reply = `Here are the active issues in **${project.name}**:`;
       if (filtered.length === 1) {
         const single = filtered[0];
@@ -1297,6 +1661,7 @@ Return ONLY a valid JSON object matching one of the formats above. No markdown f
       return {
         intent: 'chat',
         reply,
+        blocks: blocks.length > 0 ? blocks : undefined,
         widget: buildIssueListWidget(title, filter, filtered),
         modelUsed: 'heuristic-backlog',
       };
