@@ -1,4 +1,21 @@
-import { Issue, IssuePriority, IssueType } from '@projectflow/types';
+import {
+  Issue,
+  IssuePriority,
+  IssueType,
+  CopilotChatResponse,
+  CopilotWidget,
+  CopilotIssueListWidget,
+  CopilotMetricsWidget,
+  CopilotIssueItem,
+} from '@projectflow/types';
+
+export type {
+  CopilotChatResponse,
+  CopilotWidget,
+  CopilotIssueListWidget,
+  CopilotMetricsWidget,
+  CopilotIssueItem,
+};
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
@@ -178,13 +195,8 @@ export const api = {
     projectId: string,
     prompt: string,
     history?: { role: 'user' | 'assistant'; content: string }[],
-  ): Promise<{
-    intent: 'chat' | 'create_issue';
-    reply: string;
-    draft?: ParsedIssueDraft;
-    modelUsed: string;
-  }> => {
-    return request('/ai/chat', {
+  ): Promise<CopilotChatResponse> => {
+    return request<CopilotChatResponse>('/ai/chat', {
       method: 'POST',
       body: JSON.stringify({ projectId, prompt, history }),
     });
