@@ -38,9 +38,16 @@ export function getDbPool(connectionString?: string) {
     pool = new Pool({
       connectionString: connStr,
       max: 10,
-      idleTimeoutMillis: 30000,
+      idleTimeoutMillis: 10000,
       connectionTimeoutMillis: 10000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
       ssl: isRemote ? { rejectUnauthorized: false } : undefined,
+    });
+
+    pool.on('error', (err) => {
+      // Prevent unhandled idle connection termination from bubbling up
+      console.warn('[PostgreSQL Pool] Idle client error:', err.message);
     });
   }
   return pool;
