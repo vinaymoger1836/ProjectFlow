@@ -20,6 +20,7 @@ import { DRIZZLE_DB } from '../database/database.module';
 import { IssuesService } from '../issues/issues.service';
 import { ParseIssueDto } from './dto/parse-issue.dto';
 import { ExecuteAiToolDto } from './dto/execute-tool.dto';
+import { CopilotChatDto } from './dto/copilot-chat.dto';
 import { IssuePriority, IssueType } from '@projectflow/types';
 
 export interface ParsedIssueDraft {
@@ -719,6 +720,273 @@ ${JSON.stringify(candidateSummary, null, 2)}`;
       suggestedAssigneeName: chosen.name,
       assigneeReason: `Recommended due to lowest active workload (${chosen.activeIssues} open tasks).`,
       modelUsed: 'heuristic-triage',
+    };
+  }
+
+  /**
+   * ProjectFlow AI Copilot with dynamic intent routing:
+   * - Answers user questions regarding the project, backlog, pending tasks, and workloads directly.
+   * - Generates structured issue proposals ONLY when the user's intent is to create, add, or draft an issue.
+   */
+  async copilotChat(
+    userId: string,
+    dto: CopilotChatDto,
+  ): Promise<{
+    intent: 'chat' | 'create_issue';
+    reply: string;
+    draft?: ParsedIssueDraft;
+    modelUsed: string;
+  }> {
+    const project = await this.getProjectAndVerifyAccess(userId, dto.projectId);
+    const startTime = Date.now();
+
+    // 1. Gather live project context and backlog
+    const projectIssues = await this.issuesService.listIssues(userId, dto.projectId, {
+      includeArchived: false,
+      limit: 100,
+    });
+
+    const items = projectIssues.items || [];
+    const totalCount = items.length;
+    const statusCounts: Record<string, number> = {
+      BACKLOG: 0,
+      TODO: 0,
+      IN_PROGRESS: 0,
+      IN_REVIEW: 0,
+      DONE: 0,
+    };
+    const priorityCounts: Record<string, number> = {
+      P0: 0,
+      P1: 0,
+      P2: 0,
+      P3: 0,
+      P4: 0,
+    };
+    const typeCounts: Record<string, number> = {
+      BUG: 0,
+      TASK: 0,
+      STORY: 0,
+      EPIC: 0,
+      SUBTASK: 0,
+    };
+
+    for (const item of items) {
+      if (statusCounts[item.status] !== undefined) statusCounts[item.status]++;
+      if (priorityCounts[item.priority] !== undefined) priorityCounts[item.priority]++;
+      if (typeCounts[item.type] !== undefined) typeCounts[item.type]++;
+    }
+
+    const pendingCount =
+      (statusCounts.BACKLOG || 0) +
+      (statusCounts.TODO || 0) +
+      (statusCounts.IN_PROGRESS || 0) +
+      (statusCounts.IN_REVIEW || 0);
+
+    const groqKey = this.configService.get<string>('GROQ_API_KEY');
+    const geminiKey = this.configService.get<string>('GEMINI_API_KEY');
+    const openaiKey = this.configService.get<string>('OPENAI_API_KEY');
+
+    let modelUsed = 'heuristic-copilot';
+
+    const systemPrompt = `You are ProjectFlow AI Copilot, the intelligent assistant for the project "${project.name}" (Key: "${project.key}").
+
+Current Project Live Backlog & Metrics:
+- Total Active Issues: ${totalCount}
+- Pending (Unfinished) Issues: ${pendingCount}
+- Breakdown by Status:
+  * BACKLOG: ${statusCounts.BACKLOG}
+  * TODO: ${statusCounts.TODO}
+  * IN_PROGRESS: ${statusCounts.IN_PROGRESS}
+  * IN_REVIEW: ${statusCounts.IN_REVIEW}
+  * DONE: ${statusCounts.DONE}
+- Breakdown by Priority: P0 (Urgent): ${priorityCounts.P0}, P1 (High): ${priorityCounts.P1}, P2 (Medium): ${priorityCounts.P2}, P3 (Low): ${priorityCounts.P3}, P4: ${priorityCounts.P4}
+- Breakdown by Type: Bugs: ${typeCounts.BUG}, Tasks: ${typeCounts.TASK}, Stories: ${typeCounts.STORY}, Epics: ${typeCounts.EPIC}, Subtasks: ${typeCounts.SUBTASK}
+
+Live Issues Snapshot:
+${items
+  .slice(0, 35)
+  .map(
+    (i) =>
+      `- [${i.issueKey}] (${i.type}, ${i.priority}, Status: ${i.status}, Assignee: ${i.assignee?.name || 'Unassigned'}): "${i.title}"`,
+  )
+  .join('\n')}
+
+Instructions:
+You have two distinct operational modes:
+1. QUESTION ANSWERING & BACKLOG QUERY (Default for inquiries):
+   When the user asks about the project (e.g. "how many tasks are pending?", "what is in progress?", "who has open bugs?", "summarize project status", "what are P0 issues?"):
+   - Respond directly, concisely, and accurately using the live data above!
+   - Format in clean Markdown (bullet points, bold highlights, code tags for keys like \`[${project.key}-1]\`).
+   - Do NOT propose creating a task for answering a question.
+   - Output format:
+     {
+       "intent": "chat",
+       "reply": "Markdown answer here..."
+     }
+
+2. ISSUE PROPOSAL & CREATION (Only when explicitly requested):
+   ONLY when the user specifically instructs to CREATE, ADD, or PROPOSE a new issue/bug/task/story (e.g. "Create a task for...", "Add a bug: ...", "New feature: ...", "Fix checkout button", "I want to file a bug"):
+   - Set "intent" to "create_issue".
+   - Output format:
+     {
+       "intent": "create_issue",
+       "reply": "I've prepared a proposal for **{Title}**. Review the card below and confirm:",
+       "draft": {
+         "title": "Clear action-oriented title",
+         "type": "TASK" | "BUG" | "STORY" | "EPIC" | "SUBTASK",
+         "priority": "P0" | "P1" | "P2" | "P3" | "P4",
+         "status": "TODO",
+         "estimateHours": number or null,
+         "storyPoints": number or null,
+         "description": "Markdown description",
+         "suggestedDueDate": "YYYY-MM-DD" or null,
+         "explanation": "Brief 1-sentence explanation"
+       }
+     }
+
+Strict Output Format:
+Return ONLY a valid JSON object matching one of the two formats above. No markdown fences, no surrounding commentary.`;
+
+    if (groqKey || geminiKey || openaiKey) {
+      const apiKey = groqKey || geminiKey || openaiKey!;
+      const baseUrl = groqKey
+        ? 'https://api.groq.com/openai/v1'
+        : geminiKey
+        ? 'https://generativelanguage.googleapis.com/v1beta/openai'
+        : 'https://api.openai.com/v1';
+
+      const model = groqKey
+        ? this.configService.get<string>('GROQ_MODEL', 'openai/gpt-oss-120b')
+        : geminiKey
+        ? this.configService.get<string>('GEMINI_MODEL', 'gemini-2.0-flash')
+        : 'gpt-4o-mini';
+
+      modelUsed = model;
+
+      try {
+        const messagesPayload: any[] = [{ role: 'system', content: systemPrompt }];
+        if (dto.history && dto.history.length > 0) {
+          for (const h of dto.history.slice(-6)) {
+            messagesPayload.push({ role: h.role, content: h.content });
+          }
+        }
+        messagesPayload.push({ role: 'user', content: dto.prompt });
+
+        const res = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: messagesPayload,
+            temperature: 0.1,
+            response_format: { type: 'json_object' },
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const content = data.choices?.[0]?.message?.content;
+          if (content) {
+            const cleaned = content.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+            const parsed = JSON.parse(cleaned);
+
+            if (parsed.intent === 'create_issue' && parsed.draft) {
+              const draft: ParsedIssueDraft = {
+                title: parsed.draft.title || 'Untitled Issue',
+                type: this.sanitizeType(parsed.draft.type),
+                priority: this.sanitizePriority(parsed.draft.priority),
+                status: 'TODO',
+                estimateHours: parsed.draft.estimateHours || null,
+                storyPoints: parsed.draft.storyPoints || null,
+                description: parsed.draft.description || '',
+                suggestedDueDate: parsed.draft.suggestedDueDate || null,
+                explanation: parsed.draft.explanation || 'Created via ProjectFlow AI Copilot.',
+                modelUsed: model,
+              };
+
+              return {
+                intent: 'create_issue',
+                reply: parsed.reply || `I've prepared a proposal for **${draft.title}**:`,
+                draft,
+                modelUsed: model,
+              };
+            }
+
+            if (parsed.intent === 'chat' && parsed.reply) {
+              return {
+                intent: 'chat',
+                reply: parsed.reply,
+                modelUsed: model,
+              };
+            }
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`AI copilot chat API call failed (${err.message}). Falling back to heuristic.`);
+      }
+    }
+
+    // Heuristic Fallback
+    const lower = dto.prompt.toLowerCase().trim();
+    const isCreationIntent =
+      lower.startsWith('create ') ||
+      lower.startsWith('add ') ||
+      lower.startsWith('new ') ||
+      lower.startsWith('make ') ||
+      lower.includes('create a ') ||
+      lower.includes('add a ') ||
+      lower.includes('fix the ') ||
+      lower.includes('implement ');
+
+    if (
+      !isCreationIntent &&
+      (lower.includes('pending') ||
+        lower.includes('how many') ||
+        lower.includes('count') ||
+        lower.includes('status') ||
+        lower.includes('overview') ||
+        lower.includes('what') ||
+        lower.includes('in progress'))
+    ) {
+      let reply = `There are currently **${pendingCount} pending issues** in **${project.name}**:\n\n`;
+      reply += `- **${statusCounts.IN_PROGRESS}** In Progress\n`;
+      reply += `- **${statusCounts.TODO}** To Do\n`;
+      reply += `- **${statusCounts.IN_REVIEW}** In Review\n`;
+      if (statusCounts.BACKLOG > 0) reply += `- **${statusCounts.BACKLOG}** in Backlog\n`;
+      reply += `\n*(${statusCounts.DONE} completed out of ${totalCount} total issues)*\n\n`;
+
+      const activeList = items.filter((i) => i.status !== 'DONE').slice(0, 6);
+      if (activeList.length > 0) {
+        reply += `**Active issues:**\n`;
+        for (const item of activeList) {
+          reply += `- \`[${item.issueKey}]\` **${item.title}** (${item.status.replace('_', ' ')} • ${item.priority} • ${item.assignee?.name || 'Unassigned'})\n`;
+        }
+      }
+
+      return {
+        intent: 'chat',
+        reply,
+        modelUsed: 'heuristic-backlog',
+      };
+    }
+
+    if (isCreationIntent) {
+      const draft = this.heuristicFallback(dto.prompt);
+      return {
+        intent: 'create_issue',
+        reply: `I've prepared a proposal for **${draft.title}**. Review the attributes below and click **Confirm & Create Issue** when ready:`,
+        draft,
+        modelUsed: 'heuristic-fallback',
+      };
+    }
+
+    return {
+      intent: 'chat',
+      reply: `I am your ProjectFlow AI Assistant for **${project.name}**.\n\n- You can ask questions about active tasks, priorities, and status (e.g. *"how many tasks are pending?"* or *"what is in progress?"*).\n- You can ask me to draft new issues (e.g. *"Create a P1 bug for checkout timeout, estimate 4 hours"*).`,
+      modelUsed: 'heuristic-guide',
     };
   }
 }

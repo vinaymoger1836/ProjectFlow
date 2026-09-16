@@ -40,7 +40,7 @@ export function FloatingAiCopilot({
       id: 'welcome',
       role: 'assistant',
       content:
-        'Hi! I am your ProjectFlow AI Assistant. Describe any task, bug, or feature in plain language (e.g. *"Create a P1 bug for checkout timeout, estimate 4 hours"*). I will extract structured fields and generate an issue preview card for you to confirm.',
+        'Hi! I am your ProjectFlow AI Assistant. You can ask me questions about your project (e.g. *"how many tasks are pending?"*, *"what is in progress?"*) or ask me to draft a new task, bug, or story in plain language.',
       timestamp: new Date(),
     },
   ]);
@@ -71,13 +71,18 @@ export function FloatingAiCopilot({
     setIsThinking(true);
 
     try {
-      const draft = await api.parseIssueWithAi(projectId, text);
+      const history = messages
+        .filter((m) => m.content && m.id !== 'welcome')
+        .slice(-6)
+        .map((m) => ({ role: m.role, content: m.content || '' }));
+
+      const response = await api.chatWithCopilot(projectId, text, history);
 
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: `I've prepared a proposal for **${draft.title}**. Review the attributes below and click **Confirm & Create Issue** when ready:`,
-        draft,
+        content: response.reply,
+        draft: response.draft,
         timestamp: new Date(),
       };
 
@@ -105,9 +110,10 @@ export function FloatingAiCopilot({
   };
 
   const samplePrompts = [
+    'How many tasks are currently pending?',
+    'What issues are in progress right now?',
     'Create a P0 bug: checkout button double-charges on mobile, estimate 3 hours',
-    'Task: Add Stripe webhook signature verification and redis lock, 5 story points',
-    'Story: Multi-currency settlement pricing display for APAC users',
+    'Task: Add Stripe webhook signature verification, 5 story points',
   ];
 
   return (
@@ -232,7 +238,7 @@ export function FloatingAiCopilot({
                 <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center">
                   <Sparkles className="h-3 w-3 text-primary animate-spin" />
                 </div>
-                <span>Analyzing intent and generating structured issue card...</span>
+                <span>Thinking and analyzing project backlog...</span>
               </div>
             )}
 

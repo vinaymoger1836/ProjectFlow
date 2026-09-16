@@ -12,6 +12,7 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { AiService } from './ai.service';
 import { ParseIssueDto } from './dto/parse-issue.dto';
 import { ExecuteAiToolDto } from './dto/execute-tool.dto';
+import { CopilotChatDto } from './dto/copilot-chat.dto';
 
 @ApiTags('AI')
 @ApiBearerAuth()
@@ -19,6 +20,21 @@ import { ExecuteAiToolDto } from './dto/execute-tool.dto';
 @Controller('ai')
 export class AiController {
   constructor(private readonly aiService: AiService) {}
+
+  @Post('chat')
+  @ApiOperation({
+    summary: 'Chat with ProjectFlow AI Copilot (supports questions, backlog status, and issue drafting)',
+  })
+  async chat(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CopilotChatDto,
+  ) {
+    const result = await this.aiService.copilotChat(user.id, dto);
+    return {
+      success: true,
+      data: result,
+    };
+  }
 
   @Post('parse-issue')
   @ApiOperation({

@@ -174,6 +174,22 @@ export const api = {
   },
 
   // AI Workflows
+  chatWithCopilot: async (
+    projectId: string,
+    prompt: string,
+    history?: { role: 'user' | 'assistant'; content: string }[],
+  ): Promise<{
+    intent: 'chat' | 'create_issue';
+    reply: string;
+    draft?: ParsedIssueDraft;
+    modelUsed: string;
+  }> => {
+    return request('/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({ projectId, prompt, history }),
+    });
+  },
+
   parseIssueWithAi: async (projectId: string, prompt: string): Promise<ParsedIssueDraft> => {
     return request<ParsedIssueDraft>('/ai/parse-issue', {
       method: 'POST',
