@@ -738,12 +738,7 @@ ${JSON.stringify(candidateSummary, null, 2)}`;
   async copilotChat(
     userId: string,
     dto: CopilotChatDto,
-  ): Promise<{
-    intent: 'chat' | 'create_issue';
-    reply: string;
-    draft?: ParsedIssueDraft;
-    modelUsed: string;
-  }> {
+  ): Promise<CopilotChatResponse> {
     const project = await this.getProjectAndVerifyAccess(userId, dto.projectId);
     const startTime = Date.now();
 
@@ -789,25 +784,121 @@ ${JSON.stringify(candidateSummary, null, 2)}`;
       (statusCounts.IN_PROGRESS || 0) +
       (statusCounts.IN_REVIEW || 0);
 
+    const completionRate = totalCount > 0 ? Math.round((statusCounts.DONE / totalCount) * 100) : 0;
+    const bugRate = totalCount > 0 ? Math.round((typeCounts.BUG / totalCount) * 100) : 0;
+
+    let healthStatus: 'HEALTHY' | 'AT_RISK' | 'CRITICAL' | 'ON_TRACK' = 'HEALTHY';
+    let healthSummary = 'Project is healthy and progressing steadily.';
+    if (priorityCounts.P0 > 1) {
+      healthStatus = 'CRITICAL';
+      healthSummary = `Critical attention needed: ${priorityCounts.P0} urgent P0 issues open.`;
+    } else if (priorityCounts.P0 === 1 || bugRate > 35) {
+      healthStatus = 'AT_RISK';
+      healthSummary =
+        priorityCounts.P0 === 1
+          ? 'At risk: 1 unresolved P0 issue requires immediate attention.'
+          : `High defect density: ${bugRate}% of active issues are bugs.`;
+    } else if (statusCounts.IN_PROGRESS > 0 || statusCounts.DONE > 0) {
+      healthStatus = 'ON_TRACK';
+      healthSummary = `${statusCounts.DONE} of ${totalCount} issues resolved (${completionRate}% completion). Sprint flow is steady.`;
+    }
+
+    const metricsWidget: CopilotMetricsWidget = {
+      type: 'metrics',
+      title: `${project.name} • Sprint & Health Analytics`,
+      totalIssues: totalCount,
+      completedIssues: statusCounts.DONE,
+      pendingIssues: pendingCount,
+      completionRate,
+      bugCount: typeCounts.BUG,
+      bugRate,
+      statusBreakdown: {
+        backlog: statusCounts.BACKLOG,
+        todo: statusCounts.TODO,
+        inProgress: statusCounts.IN_PROGRESS,
+        inReview: statusCounts.IN_REVIEW,
+        done: statusCounts.DONE,
+      },
+      priorityBreakdown: {
+        p0: priorityCounts.P0,
+        p1: priorityCounts.P1,
+        p2: priorityCounts.P2,
+        p3: priorityCounts.P3,
+        p4: priorityCounts.P4,
+      },
+      healthStatus,
+      healthSummary,
+    };
+
+    const buildIssueListWidget = (
+      title: string,
+      filter: string,
+      filteredItems: typeof items,
+    ): CopilotIssueListWidget => ({
+      type: 'issue_list',
+      title,
+      filterApplied: filter,
+      totalCount: filteredItems.length,
+      issues: filteredItems.slice(0, 15).map((i) => ({
+        id: i.id,
+        issueKey: i.issueKey,
+        title: i.title,
+        type: i.type,
+        priority: i.priority,
+        status: i.status,
+        assignee: i.assignee
+          ? {
+              id: i.assignee.id,
+              name: i.assignee.name,
+              avatarUrl: i.assignee.avatarUrl,
+            }
+          : null,
+        estimateHours: i.estimateHours,
+        storyPoints: i.storyPoints,
+      })),
+    });
+
+    const lowerPrompt = dto.prompt.toLowerCase().trim();
+    const isMetricsIntent =
+      lowerPrompt.includes('rate') ||
+      lowerPrompt.includes('completion') ||
+      lowerPrompt.includes('bug rate') ||
+      lowerPrompt.includes('metric') ||
+      lowerPrompt.includes('percent') ||
+      lowerPrompt.includes('health') ||
+      lowerPrompt.includes('analytics') ||
+      lowerPrompt.includes('progress');
+
+    const isIssueListIntent =
+      lowerPrompt.includes('pending') ||
+      lowerPrompt.includes('what are they') ||
+      lowerPrompt.includes('which') ||
+      lowerPrompt.includes('list') ||
+      lowerPrompt.includes('show') ||
+      lowerPrompt.includes('tasks') ||
+      lowerPrompt.includes('issues') ||
+      lowerPrompt.includes('in progress') ||
+      lowerPrompt.includes('bugs') ||
+      lowerPrompt.includes('todo') ||
+      lowerPrompt === 'what' ||
+      lowerPrompt === 'what are the issues';
+
     const groqKey = this.configService.get<string>('GROQ_API_KEY');
     const geminiKey = this.configService.get<string>('GEMINI_API_KEY');
     const openaiKey = this.configService.get<string>('OPENAI_API_KEY');
 
     let modelUsed = 'heuristic-copilot';
 
-    const systemPrompt = `You are ProjectFlow AI Copilot, the intelligent assistant for the project "${project.name}" (Key: "${project.key}").
+    const systemPrompt = `You are ProjectFlow AI Copilot, the intelligent assistant for project "${project.name}" (Key: "${project.key}").
 
 Current Project Live Backlog & Metrics:
 - Total Active Issues: ${totalCount}
 - Pending (Unfinished) Issues: ${pendingCount}
-- Breakdown by Status:
-  * BACKLOG: ${statusCounts.BACKLOG}
-  * TODO: ${statusCounts.TODO}
-  * IN_PROGRESS: ${statusCounts.IN_PROGRESS}
-  * IN_REVIEW: ${statusCounts.IN_REVIEW}
-  * DONE: ${statusCounts.DONE}
-- Breakdown by Priority: P0 (Urgent): ${priorityCounts.P0}, P1 (High): ${priorityCounts.P1}, P2 (Medium): ${priorityCounts.P2}, P3 (Low): ${priorityCounts.P3}, P4: ${priorityCounts.P4}
-- Breakdown by Type: Bugs: ${typeCounts.BUG}, Tasks: ${typeCounts.TASK}, Stories: ${typeCounts.STORY}, Epics: ${typeCounts.EPIC}, Subtasks: ${typeCounts.SUBTASK}
+- Completion Rate: ${completionRate}% (${statusCounts.DONE}/${totalCount} completed)
+- Bug Rate: ${bugRate}% (${typeCounts.BUG} bugs out of ${totalCount})
+- Status Breakdown: BACKLOG: ${statusCounts.BACKLOG}, TODO: ${statusCounts.TODO}, IN_PROGRESS: ${statusCounts.IN_PROGRESS}, IN_REVIEW: ${statusCounts.IN_REVIEW}, DONE: ${statusCounts.DONE}
+- Priority Breakdown: P0 (Urgent): ${priorityCounts.P0}, P1 (High): ${priorityCounts.P1}, P2 (Medium): ${priorityCounts.P2}, P3 (Low): ${priorityCounts.P3}, P4: ${priorityCounts.P4}
+- Type Breakdown: Bugs: ${typeCounts.BUG}, Tasks: ${typeCounts.TASK}, Stories: ${typeCounts.STORY}, Epics: ${typeCounts.EPIC}, Subtasks: ${typeCounts.SUBTASK}
 
 Live Issues Snapshot:
 ${items
@@ -818,41 +909,58 @@ ${items
   )
   .join('\n')}
 
-Instructions:
-You have two distinct operational modes:
-1. QUESTION ANSWERING & BACKLOG QUERY (Default for inquiries):
-   When the user asks about the project (e.g. "how many tasks are pending?", "what is in progress?", "who has open bugs?", "summarize project status", "what are P0 issues?"):
-   - Respond directly, concisely, and accurately using the live data above!
-   - Format in clean Markdown (bullet points, bold highlights, code tags for keys like \`[${project.key}-1]\`).
-   - Do NOT propose creating a task for answering a question.
-   - Output format:
+OPERATIONAL MODES & GENERATIVE UI:
+Your response should be concise, professional, and trigger interactive Generative UI widgets when helpful!
+
+1. INQUIRY & STATUS (intent: "chat"):
+   - When the user asks about completion rate, bug rate, sprint health, progress metrics, status overview (e.g. "what are completion/bug rate", "how is sprint going", "metrics"):
+     Set "widget": "metrics".
+     JSON format:
      {
        "intent": "chat",
-       "reply": "Markdown answer here..."
+       "reply": "Crisp 1-2 sentence high-level summary of the metrics.",
+       "widget": "metrics"
      }
 
-2. ISSUE PROPOSAL & CREATION (Only when explicitly requested):
-   ONLY when the user specifically instructs to CREATE, ADD, or PROPOSE a new issue/bug/task/story (e.g. "Create a task for...", "Add a bug: ...", "New feature: ...", "Fix checkout button", "I want to file a bug"):
-   - Set "intent" to "create_issue".
-   - Output format:
+   - When the user asks which issues are pending, what is in progress, list of bugs, what are they, show tasks, or asks about specific items:
+     Set "widget": "issue_list".
+     Filter options: "pending" | "in_progress" | "bugs" | "todo" | "done" | "all".
+     JSON format:
      {
-       "intent": "create_issue",
-       "reply": "I've prepared a proposal for **{Title}**. Review the card below and confirm:",
-       "draft": {
-         "title": "Clear action-oriented title",
-         "type": "TASK" | "BUG" | "STORY" | "EPIC" | "SUBTASK",
-         "priority": "P0" | "P1" | "P2" | "P3" | "P4",
-         "status": "TODO",
-         "estimateHours": number or null,
-         "storyPoints": number or null,
-         "description": "Markdown description",
-         "suggestedDueDate": "YYYY-MM-DD" or null,
-         "explanation": "Brief 1-sentence explanation"
-       }
+       "intent": "chat",
+       "reply": "Here are the pending issues in the project:",
+       "widget": "issue_list",
+       "filter": "pending"
      }
+
+   - For general conversational questions, tips, or guidance:
+     JSON format:
+     {
+       "intent": "chat",
+       "reply": "Clean markdown response with bold highlights and code tags for issue keys."
+     }
+
+2. ISSUE CREATION (intent: "create_issue"):
+   ONLY when the user explicitly instructs to CREATE, ADD, or PROPOSE a new issue/bug/task/story:
+   JSON format:
+   {
+     "intent": "create_issue",
+     "reply": "I've prepared a proposal for **{Title}**. Review the card below and confirm:",
+     "draft": {
+       "title": "Clear action title",
+       "type": "TASK" | "BUG" | "STORY" | "EPIC" | "SUBTASK",
+       "priority": "P0" | "P1" | "P2" | "P3" | "P4",
+       "status": "TODO",
+       "estimateHours": number or null,
+       "storyPoints": number or null,
+       "description": "Description in markdown",
+       "suggestedDueDate": "YYYY-MM-DD" or null,
+       "explanation": "1-sentence rationale"
+     }
+   }
 
 Strict Output Format:
-Return ONLY a valid JSON object matching one of the two formats above. No markdown fences, no surrounding commentary.`;
+Return ONLY a valid JSON object matching one of the formats above. No markdown fences, no text before or after.`;
 
     if (groqKey || geminiKey || openaiKey) {
       const apiKey = groqKey || geminiKey || openaiKey!;
@@ -923,9 +1031,41 @@ Return ONLY a valid JSON object matching one of the two formats above. No markdo
             }
 
             if (parsed.intent === 'chat' && parsed.reply) {
+              let widget: CopilotWidget | undefined;
+
+              if (parsed.widget === 'metrics' || isMetricsIntent) {
+                widget = metricsWidget;
+              } else if (parsed.widget === 'issue_list' || isIssueListIntent) {
+                const filter = parsed.filter || 'pending';
+                let filtered = items;
+                let title = `Pending Issues (${pendingCount})`;
+
+                if (Array.isArray(parsed.selectedKeys) && parsed.selectedKeys.length > 0) {
+                  filtered = items.filter((i) => parsed.selectedKeys.includes(i.issueKey));
+                  title = `Selected Issues (${filtered.length})`;
+                } else if (filter === 'in_progress') {
+                  filtered = items.filter((i) => i.status === 'IN_PROGRESS');
+                  title = `Issues In Progress (${filtered.length})`;
+                } else if (filter === 'bugs') {
+                  filtered = items.filter((i) => i.type === 'BUG');
+                  title = `Project Bugs (${filtered.length})`;
+                } else if (filter === 'todo') {
+                  filtered = items.filter((i) => i.status === 'TODO');
+                  title = `To Do Backlog (${filtered.length})`;
+                } else if (filter === 'done') {
+                  filtered = items.filter((i) => i.status === 'DONE');
+                  title = `Completed Issues (${filtered.length})`;
+                } else {
+                  filtered = items.filter((i) => i.status !== 'DONE');
+                }
+
+                widget = buildIssueListWidget(title, filter, filtered);
+              }
+
               return {
                 intent: 'chat',
                 reply: parsed.reply,
+                widget,
                 modelUsed: model,
               };
             }
@@ -937,45 +1077,44 @@ Return ONLY a valid JSON object matching one of the two formats above. No markdo
     }
 
     // Heuristic Fallback
-    const lower = dto.prompt.toLowerCase().trim();
     const isCreationIntent =
-      lower.startsWith('create ') ||
-      lower.startsWith('add ') ||
-      lower.startsWith('new ') ||
-      lower.startsWith('make ') ||
-      lower.includes('create a ') ||
-      lower.includes('add a ') ||
-      lower.includes('fix the ') ||
-      lower.includes('implement ');
+      lowerPrompt.startsWith('create ') ||
+      lowerPrompt.startsWith('add ') ||
+      lowerPrompt.startsWith('new ') ||
+      lowerPrompt.startsWith('make ') ||
+      lowerPrompt.includes('create a ') ||
+      lowerPrompt.includes('add a ') ||
+      lowerPrompt.includes('fix the ') ||
+      lowerPrompt.includes('implement ');
 
-    if (
-      !isCreationIntent &&
-      (lower.includes('pending') ||
-        lower.includes('how many') ||
-        lower.includes('count') ||
-        lower.includes('status') ||
-        lower.includes('overview') ||
-        lower.includes('what') ||
-        lower.includes('in progress'))
-    ) {
-      let reply = `There are currently **${pendingCount} pending issues** in **${project.name}**:\n\n`;
-      reply += `- **${statusCounts.IN_PROGRESS}** In Progress\n`;
-      reply += `- **${statusCounts.TODO}** To Do\n`;
-      reply += `- **${statusCounts.IN_REVIEW}** In Review\n`;
-      if (statusCounts.BACKLOG > 0) reply += `- **${statusCounts.BACKLOG}** in Backlog\n`;
-      reply += `\n*(${statusCounts.DONE} completed out of ${totalCount} total issues)*\n\n`;
+    if (!isCreationIntent && isMetricsIntent) {
+      return {
+        intent: 'chat',
+        reply: `Here are the latest sprint metrics and quality rates for **${project.name}**:`,
+        widget: metricsWidget,
+        modelUsed: 'heuristic-metrics',
+      };
+    }
 
-      const activeList = items.filter((i) => i.status !== 'DONE').slice(0, 6);
-      if (activeList.length > 0) {
-        reply += `**Active issues:**\n`;
-        for (const item of activeList) {
-          reply += `- \`[${item.issueKey}]\` **${item.title}** (${item.status.replace('_', ' ')} • ${item.priority} • ${item.assignee?.name || 'Unassigned'})\n`;
-        }
+    if (!isCreationIntent && (isIssueListIntent || lowerPrompt.includes('count') || lowerPrompt.includes('status'))) {
+      let filtered = items.filter((i) => i.status !== 'DONE');
+      let title = `Pending Issues (${filtered.length})`;
+      let filter = 'pending';
+
+      if (lowerPrompt.includes('bug')) {
+        filtered = items.filter((i) => i.type === 'BUG');
+        title = `Project Bugs (${filtered.length})`;
+        filter = 'bugs';
+      } else if (lowerPrompt.includes('in progress')) {
+        filtered = items.filter((i) => i.status === 'IN_PROGRESS');
+        title = `Issues In Progress (${filtered.length})`;
+        filter = 'in_progress';
       }
 
       return {
         intent: 'chat',
-        reply,
+        reply: `Here are the active issues in **${project.name}**:`,
+        widget: buildIssueListWidget(title, filter, filtered),
         modelUsed: 'heuristic-backlog',
       };
     }
@@ -992,9 +1131,10 @@ Return ONLY a valid JSON object matching one of the two formats above. No markdo
 
     return {
       intent: 'chat',
-      reply: `I am your ProjectFlow AI Assistant for **${project.name}**.\n\n- You can ask questions about active tasks, priorities, and status (e.g. *"how many tasks are pending?"* or *"what is in progress?"*).\n- You can ask me to draft new issues (e.g. *"Create a P1 bug for checkout timeout, estimate 4 hours"*).`,
+      reply: `I am your ProjectFlow AI Assistant for **${project.name}**.\n\n- Ask questions about active tasks, priorities, and status (e.g. *"which issues are pending?"*, *"what is the bug rate?"*).\n- Or draft new issues (e.g. *"Create a P1 bug for checkout timeout, estimate 4 hours"*).`,
       modelUsed: 'heuristic-guide',
     };
   }
 }
+
 
