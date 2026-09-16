@@ -172,3 +172,80 @@ export interface PaginatedResult<T> {
   pageSize: number;
   totalPages: number;
 }
+
+// ==========================================
+// AI Copilot & Generative UI Types
+// ==========================================
+
+export interface CopilotIssueItem {
+  id: string;
+  issueKey: string;
+  title: string;
+  type: IssueType;
+  priority: IssuePriority;
+  status: string;
+  assignee?: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+  } | null;
+  estimateHours?: number | null;
+  storyPoints?: number | null;
+}
+
+export interface CopilotIssueListWidget {
+  type: 'issue_list';
+  title: string;
+  filterApplied?: string;
+  totalCount: number;
+  issues: CopilotIssueItem[];
+}
+
+export interface CopilotMetricsWidget {
+  type: 'metrics';
+  title: string;
+  totalIssues: number;
+  completedIssues: number;
+  pendingIssues: number;
+  completionRate: number;
+  bugCount: number;
+  bugRate: number;
+  statusBreakdown: {
+    backlog: number;
+    todo: number;
+    inProgress: number;
+    inReview: number;
+    done: number;
+  };
+  priorityBreakdown: {
+    p0: number;
+    p1: number;
+    p2: number;
+    p3: number;
+    p4: number;
+  };
+  healthStatus: 'HEALTHY' | 'AT_RISK' | 'CRITICAL' | 'ON_TRACK';
+  healthSummary: string;
+}
+
+export type CopilotWidget = CopilotIssueListWidget | CopilotMetricsWidget;
+
+export interface CopilotChatResponse {
+  intent: 'chat' | 'create_issue';
+  reply: string;
+  widget?: CopilotWidget;
+  draft?: {
+    title: string;
+    type: IssueType;
+    priority: IssuePriority;
+    status: string;
+    estimateHours?: number | null;
+    storyPoints?: number | null;
+    description: string;
+    suggestedDueDate?: string | null;
+    explanation?: string;
+    modelUsed?: string;
+  };
+  modelUsed: string;
+}
+

@@ -21,7 +21,14 @@ import { IssuesService } from '../issues/issues.service';
 import { ParseIssueDto } from './dto/parse-issue.dto';
 import { ExecuteAiToolDto } from './dto/execute-tool.dto';
 import { CopilotChatDto } from './dto/copilot-chat.dto';
-import { IssuePriority, IssueType } from '@projectflow/types';
+import {
+  IssuePriority,
+  IssueType,
+  CopilotChatResponse,
+  CopilotWidget,
+  CopilotIssueListWidget,
+  CopilotMetricsWidget,
+} from '@projectflow/types';
 
 export interface ParsedIssueDraft {
   title: string;
