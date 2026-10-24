@@ -9,6 +9,7 @@ import { GenerativeProfileCard } from './generative-profile-card';
 import { GenerativeIssueList } from '../generative-issue-list';
 import { GenerativeMetricsCard } from '../generative-metrics-card';
 import { GenerativeIssueCard } from '../generative-issue-card';
+import { GenerativeSprintPlanCard } from '../generative-sprint-plan-card';
 
 interface GenerativeBlockRendererProps {
   block: GenerativeBlock;
@@ -51,6 +52,9 @@ export function GenerativeBlockRenderer({
           onOpenIssue={onOpenIssueInDrawer}
         />
       );
+
+    case 'sprint_plan':
+      return <GenerativeSprintPlanCard plan={block.plan} onOpenIssue={onOpenIssueInDrawer} />;
 
     default:
       return null;

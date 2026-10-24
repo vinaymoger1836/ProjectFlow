@@ -121,6 +121,13 @@ export interface Sprint {
   endDate?: Date | null;
   status: SprintStatus;
   capacityPoints?: number | null;
+  startedAt?: Date | null;
+  committedPoints?: number | null;
+  committedIssueCount?: number | null;
+  completedAt?: Date | null;
+  completedPoints?: number | null;
+  completedIssueCount?: number | null;
+  carriedOverIssueCount?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -301,11 +308,12 @@ export type GenerativeBlock =
   | CopilotTableBlock
   | CopilotProfileCardBlock
   | CopilotProposalBlock
+  | CopilotSprintPlanBlock
   | CopilotIssueListWidget
   | CopilotMetricsWidget;
 
 export interface CopilotChatResponse {
-  intent: 'chat' | 'create_issue';
+  intent: 'chat' | 'create_issue' | 'plan_sprint';
   reply: string;
   blocks?: GenerativeBlock[];
   widget?: CopilotWidget;
@@ -360,4 +368,114 @@ export interface SimilarIssue {
 export interface SimilarIssuesResponse {
   matches: SimilarIssue[];
   semanticEnabled: boolean;
+}
+
+// ==========================================
+// Sprints, Velocity & AI Sprint Planning (Phase 5)
+// ==========================================
+
+/** Live tallies over the issues currently in a sprint. */
+export interface SprintProgress {
+  issueCount: number;
+  doneIssueCount: number;
+  totalPoints: number;
+  donePoints: number;
+  unestimatedCount: number;
+  blockedCount: number;
+}
+
+/** Sprint as returned by the API (dates are ISO strings). */
+export interface SprintSummary {
+  id: string;
+  projectId: string;
+  name: string;
+  goal: string | null;
+  status: SprintStatus;
+  capacityPoints: number | null;
+  startDate: string | null;
+  endDate: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  committedPoints: number | null;
+  committedIssueCount: number | null;
+  completedPoints: number | null;
+  completedIssueCount: number | null;
+  carriedOverIssueCount: number | null;
+  progress: SprintProgress;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SprintVelocityEntry {
+  sprintId: string;
+  name: string;
+  committedPoints: number;
+  completedPoints: number;
+  completedAt: string;
+}
+
+export interface SprintVelocity {
+  /** Most recent completed sprints, newest first. */
+  recent: SprintVelocityEntry[];
+  /** Mean completed points of `recent`, or null without history. */
+  averageVelocity: number | null;
+}
+
+export type SprintRolloverTarget = { type: 'BACKLOG' } | { type: 'SPRINT'; sprintId: string };
+
+export interface SprintCompletionResult {
+  sprint: SprintSummary;
+  carriedOverCount: number;
+  carriedOverTo: { type: 'BACKLOG' } | { type: 'SPRINT'; sprintId: string; sprintName: string };
+}
+
+export interface SprintPlanIssue {
+  id: string;
+  issueKey: string;
+  title: string;
+  type: IssueType;
+  priority: IssuePriority;
+  status: string;
+  storyPoints: number | null;
+  /** Points counted toward capacity; equals storyPoints unless the estimate was assumed. */
+  plannedPoints: number;
+  estimateAssumed: boolean;
+  reason: string;
+}
+
+export interface SprintPlanWarning {
+  level: 'info' | 'warning' | 'critical';
+  message: string;
+  issueKeys?: string[];
+}
+
+export type SprintCapacitySource = 'REQUEST' | 'SPRINT' | 'VELOCITY' | 'DEFAULT';
+
+/** AI-assisted proposal; nothing is persisted until the user applies it. */
+export interface SprintPlanProposal {
+  projectId: string;
+  /** Existing PLANNED sprint to fill, or null to create a new sprint on apply. */
+  targetSprintId: string | null;
+  sprintName: string;
+  goal: string;
+  capacityPoints: number;
+  capacitySource: SprintCapacitySource;
+  averageVelocity: number | null;
+  proposedPoints: number;
+  /** Issues already in the target sprint (kept as-is). */
+  existingIssues: SprintPlanIssue[];
+  /** Newly proposed issues, in ranked order. */
+  issues: SprintPlanIssue[];
+  /** Ranked candidates that did not fit, offered for manual swaps during review. */
+  alternates: SprintPlanIssue[];
+  warnings: SprintPlanWarning[];
+  rationale: string;
+  suggestedStartDate: string;
+  suggestedEndDate: string;
+  modelUsed: string;
+}
+
+export interface CopilotSprintPlanBlock {
+  type: 'sprint_plan';
+  plan: SprintPlanProposal;
 }

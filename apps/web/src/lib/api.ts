@@ -19,9 +19,25 @@ import {
   IssueSearchResult,
   SimilarIssue,
   SimilarIssuesResponse,
+  SprintSummary,
+  SprintStatus,
+  SprintVelocity,
+  SprintCompletionResult,
+  SprintPlanProposal,
+  SprintPlanIssue,
+  SprintPlanWarning,
+  CopilotSprintPlanBlock,
 } from '@projectflow/types';
 
 export type {
+  SprintSummary,
+  SprintStatus,
+  SprintVelocity,
+  SprintCompletionResult,
+  SprintPlanProposal,
+  SprintPlanIssue,
+  SprintPlanWarning,
+  CopilotSprintPlanBlock,
   IssueSearchResponse,
   IssueSearchResult,
   SimilarIssue,
@@ -248,6 +264,101 @@ export const api = {
   }> => {
     return request(`/ai/issues/${issueId}/suggest-triage`, {
       method: 'POST',
+    });
+  },
+
+  /** Pages through the 100-item API limit to return every matching issue. */
+  listAllIssues: async (projectId: string, params: IssueQueryParams = {}): Promise<PaginatedIssues['items']> => {
+    const items: PaginatedIssues['items'] = [];
+    for (let page = 1; ; page++) {
+      const res = await api.listIssues(projectId, { ...params, page, limit: 100 });
+      items.push(...res.items);
+      if (page >= res.totalPages) return items;
+    }
+  },
+
+  // Sprints
+  listSprints: async (projectId: string, status?: SprintStatus[]): Promise<SprintSummary[]> => {
+    const query = status && status.length > 0 ? `?status=${status.join(',')}` : '';
+    return request<SprintSummary[]>(`/projects/${projectId}/sprints${query}`);
+  },
+
+  getSprintVelocity: async (projectId: string): Promise<SprintVelocity> => {
+    return request<SprintVelocity>(`/projects/${projectId}/sprints/velocity`);
+  },
+
+  createSprint: async (
+    projectId: string,
+    payload: { name?: string; goal?: string; capacityPoints?: number; startDate?: string; endDate?: string },
+  ): Promise<SprintSummary> => {
+    return request<SprintSummary>(`/projects/${projectId}/sprints`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateSprint: async (
+    sprintId: string,
+    payload: {
+      name?: string;
+      goal?: string | null;
+      capacityPoints?: number | null;
+      startDate?: string | null;
+      endDate?: string | null;
+    },
+  ): Promise<SprintSummary> => {
+    return request<SprintSummary>(`/sprints/${sprintId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteSprint: async (sprintId: string): Promise<{ success: boolean; message: string }> => {
+    return request(`/sprints/${sprintId}`, { method: 'DELETE' });
+  },
+
+  startSprint: async (sprintId: string, payload: { startDate?: string; endDate?: string }): Promise<SprintSummary> => {
+    return request<SprintSummary>(`/sprints/${sprintId}/start`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  completeSprint: async (
+    sprintId: string,
+    payload: { rolloverTo: 'BACKLOG' | 'SPRINT'; rolloverSprintId?: string },
+  ): Promise<SprintCompletionResult> => {
+    return request<SprintCompletionResult>(`/sprints/${sprintId}/complete`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  planSprint: async (payload: {
+    projectId: string;
+    sprintId?: string;
+    capacityPoints?: number;
+    instructions?: string;
+  }): Promise<SprintPlanProposal> => {
+    return request<SprintPlanProposal>('/ai/sprint-plan', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  applySprintPlan: async (payload: {
+    projectId: string;
+    sprintId?: string;
+    name: string;
+    goal?: string;
+    capacityPoints: number;
+    startDate?: string;
+    endDate?: string;
+    issueIds: string[];
+  }): Promise<SprintSummary> => {
+    return request<SprintSummary>('/ai/sprint-plan/apply', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   },
 

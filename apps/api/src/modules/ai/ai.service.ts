@@ -19,6 +19,7 @@ import {
 } from '@projectflow/database';
 import { DRIZZLE_DB } from '../database/database.module';
 import { IssuesService } from '../issues/issues.service';
+import { SprintPlannerService } from '../sprints/sprint-planner.service';
 import { ParseIssueDto } from './dto/parse-issue.dto';
 import { ExecuteAiToolDto } from './dto/execute-tool.dto';
 import { CopilotChatDto } from './dto/copilot-chat.dto';
@@ -31,6 +32,12 @@ import {
   CopilotMetricsWidget,
   GenerativeBlock,
 } from '@projectflow/types';
+
+/**
+ * "Prepare next sprint", "plan sprint 4", "propose a sprint plan"... but not "summarize the sprint".
+ */
+const SPRINT_PLANNING_INTENT =
+  /\b(prepare|plan|draft|propose|suggest|build|create|set\s?up|fill)\b[^.?!]{0,40}\bsprint\b|\bsprint\s+plan(ning)?\b/i;
 
 export interface ParsedIssueDraft {
   title: string;
@@ -53,6 +60,7 @@ export class AiService {
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly configService: ConfigService,
     private readonly issuesService: IssuesService,
+    private readonly sprintPlanner: SprintPlannerService,
   ) {}
 
   /**
@@ -744,6 +752,20 @@ ${JSON.stringify(candidateSummary, null, 2)}`;
   ): Promise<CopilotChatResponse> {
     const project = await this.getProjectAndVerifyAccess(userId, dto.projectId);
     const startTime = Date.now();
+
+    // 0. Sprint planning is routed to the Sprint Planner toolset (velocity, capacity, scope)
+    if (SPRINT_PLANNING_INTENT.test(dto.prompt)) {
+      const plan = await this.sprintPlanner.planSprint(userId, {
+        projectId: dto.projectId,
+        instructions: dto.prompt,
+      });
+      return {
+        intent: 'plan_sprint',
+        reply: `Here's a proposed plan for **${plan.sprintName}**: ${plan.issues.length + plan.existingIssues.length} issues, ${plan.proposedPoints} of ${plan.capacityPoints} pts. Review and adjust it below, then create the sprint.`,
+        blocks: [{ type: 'sprint_plan', plan }],
+        modelUsed: plan.modelUsed,
+      };
+    }
 
     // 1. Gather live project context and backlog
     const projectIssues = await this.issuesService.listIssues(userId, dto.projectId, {

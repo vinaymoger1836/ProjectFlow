@@ -2,6 +2,7 @@ import { pgTable, uuid, varchar, text, integer, timestamp, boolean, index } from
 import { sql } from 'drizzle-orm';
 import { projects } from './projects';
 import { users } from './users';
+import { sprints } from './sprints';
 import type { IssuePriority, IssueType } from '@projectflow/types';
 import { tsvector } from './custom-types';
 
@@ -22,7 +23,8 @@ export const issues = pgTable('issues', {
     .references(() => users.id, { onDelete: 'restrict' })
     .notNull(),
   parentIssueId: uuid('parent_issue_id'),
-  sprintId: uuid('sprint_id'),
+  // Current sprint; null = backlog. Deleting a sprint returns its issues to the backlog.
+  sprintId: uuid('sprint_id').references(() => sprints.id, { onDelete: 'set null' }),
   milestoneId: uuid('milestone_id'),
   releaseId: uuid('release_id'),
   storyPoints: integer('story_points'),
@@ -40,6 +42,7 @@ export const issues = pgTable('issues', {
   ),
 }, (table) => [
   index('issues_project_id_idx').on(table.projectId),
+  index('issues_sprint_id_idx').on(table.sprintId),
   index('issues_search_vector_idx').using('gin', table.searchVector),
 ]);
 

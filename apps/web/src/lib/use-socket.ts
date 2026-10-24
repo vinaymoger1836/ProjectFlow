@@ -65,10 +65,18 @@ export function useProjectSocket(projectId?: string) {
     // Listen for live updates from other team members / background workers
     socket.on('issue:created', () => {
       queryClient.invalidateQueries({ queryKey: ['issues', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
+    });
+
+    // Sprint lifecycle and bulk membership changes affect both sprint tallies and issue lists
+    socket.on('sprint:updated', () => {
+      queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['issues', projectId] });
     });
 
     socket.on('issue:updated', (updatedIssue) => {
       queryClient.invalidateQueries({ queryKey: ['issues', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
       if (updatedIssue?.id) {
         queryClient.invalidateQueries({ queryKey: ['issue', updatedIssue.id] });
       }

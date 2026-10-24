@@ -197,6 +197,15 @@ export class EventsGateway implements OnGatewayInit, OnGatewayDisconnect {
   }
 
   /**
+   * Broadcasts sprint lifecycle or membership changes (create, start, complete, bulk assignment).
+   */
+  broadcastSprintUpdated(projectId: string, sprintId: string) {
+    if (this.server) {
+      this.server.to(`project:${projectId}`).emit('sprint:updated', { projectId, sprintId });
+    }
+  }
+
+  /**
    * Broadcasts comment added event.
    */
   broadcastCommentAdded(projectId: string, issueId: string, comment: unknown) {

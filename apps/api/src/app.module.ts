@@ -10,6 +10,7 @@ import { IssuesModule } from './modules/issues/issues.module';
 import { AiModule } from './modules/ai/ai.module';
 import { EventsModule } from './modules/events/events.module';
 import { SearchModule } from './modules/search/search.module';
+import { SprintsModule } from './modules/sprints/sprints.module';
 import { HealthController } from './modules/health/health.controller';
 
 @Module({
@@ -37,6 +38,7 @@ import { HealthController } from './modules/health/health.controller';
     AiModule,
     EventsModule,
     SearchModule,
+    SprintsModule,
   ],
   controllers: [HealthController],
   providers: [],

@@ -4,6 +4,7 @@ import {
   Body,
   Param,
   UseGuards,
+  HttpCode,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
@@ -13,13 +14,50 @@ import { AiService } from './ai.service';
 import { ParseIssueDto } from './dto/parse-issue.dto';
 import { ExecuteAiToolDto } from './dto/execute-tool.dto';
 import { CopilotChatDto } from './dto/copilot-chat.dto';
+import { SprintPlannerService } from '../sprints/sprint-planner.service';
+import { PlanSprintDto, ApplySprintPlanDto } from '../sprints/dto/sprint-plan.dto';
 
 @ApiTags('AI')
 @ApiBearerAuth()
 @UseGuards(SupabaseAuthGuard)
 @Controller('ai')
 export class AiController {
-  constructor(private readonly aiService: AiService) {}
+  constructor(
+    private readonly aiService: AiService,
+    private readonly sprintPlanner: SprintPlannerService,
+  ) {}
+
+  @Post('sprint-plan')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Propose a sprint scope from velocity, capacity, and the ranked backlog (no changes persisted)',
+  })
+  async planSprint(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: PlanSprintDto,
+  ) {
+    const plan = await this.sprintPlanner.planSprint(user.id, dto);
+    return {
+      success: true,
+      data: plan,
+    };
+  }
+
+  @Post('sprint-plan/apply')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Apply a reviewed sprint plan: create/update the PLANNED sprint and assign its issues',
+  })
+  async applySprintPlan(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ApplySprintPlanDto,
+  ) {
+    const sprint = await this.sprintPlanner.applyPlan(user.id, dto);
+    return {
+      success: true,
+      data: sprint,
+    };
+  }
 
   @Post('chat')
   @ApiOperation({

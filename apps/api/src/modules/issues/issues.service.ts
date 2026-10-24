@@ -18,6 +18,7 @@ import {
   issueComments,
   issueAttachments,
   activities,
+  sprints,
 } from '@projectflow/database';
 import { DRIZZLE_DB } from '../database/database.module';
 import { CreateIssueDto } from './dto/create-issue.dto';
@@ -58,6 +59,9 @@ export class IssuesService {
    */
   async createIssue(userId: string, projectId: string, dto: CreateIssueDto) {
     const project = await this.getProjectAndVerifyAccess(userId, projectId);
+    if (dto.sprintId) {
+      await this.assertSprintAssignable(projectId, dto.sprintId);
+    }
 
     const result = await this.db.transaction(async (tx) => {
       // 1. Atomically increment project issueCounter to prevent sequence race conditions
@@ -381,6 +385,9 @@ export class IssuesService {
     }
 
     const project = await this.getProjectAndVerifyAccess(userId, existing.projectId);
+    if (dto.sprintId) {
+      await this.assertSprintAssignable(existing.projectId, dto.sprintId);
+    }
 
     const result = await this.db.transaction(async (tx) => {
       const updates: Partial<typeof issues.$inferInsert> = {
@@ -886,6 +893,24 @@ export class IssuesService {
       ...attachment,
       uploader,
     };
+  }
+
+  /**
+   * Internal helper: an issue may only join a PLANNED or ACTIVE sprint of its own project.
+   */
+  private async assertSprintAssignable(projectId: string, sprintId: string) {
+    const [sprint] = await this.db
+      .select({ name: sprints.name, status: sprints.status })
+      .from(sprints)
+      .where(and(eq(sprints.id, sprintId), eq(sprints.projectId, projectId)))
+      .limit(1);
+
+    if (!sprint) {
+      throw new BadRequestException(`Sprint '${sprintId}' does not exist in this project.`);
+    }
+    if (sprint.status !== 'PLANNED' && sprint.status !== 'ACTIVE') {
+      throw new BadRequestException(`${sprint.name} is ${sprint.status.toLowerCase()} and cannot receive issues.`);
+    }
   }
 
   /**
