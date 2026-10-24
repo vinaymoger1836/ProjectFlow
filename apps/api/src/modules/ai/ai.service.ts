@@ -14,6 +14,7 @@ import {
   users,
   issues,
   userRoles,
+  roles,
   aiAuditTrail,
 } from '@projectflow/database';
 import { DRIZZLE_DB } from '../database/database.module';
@@ -596,10 +597,11 @@ Analyze this issue and discussion thread. Produce a crisp executive summary in J
         id: users.id,
         name: users.name,
         email: users.email,
-        roleId: userRoles.roleId,
+        role: roles.name,
       })
       .from(userRoles)
       .innerJoin(users, eq(userRoles.userId, users.id))
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
       .where(eq(userRoles.organizationId, project.organizationId));
 
     // Fetch active workload (open issues) per team member in this project

@@ -2,6 +2,7 @@ import { pgTable, uuid, varchar, text, integer, timestamp, boolean, index } from
 import { sql } from 'drizzle-orm';
 import { projects } from './projects';
 import { users } from './users';
+import type { IssuePriority, IssueType } from '@projectflow/types';
 import { tsvector } from './custom-types';
 
 export const issues = pgTable('issues', {
@@ -13,9 +14,9 @@ export const issues = pgTable('issues', {
   keyNumber: integer('key_number').notNull(), // 1, 2, 3... sequential per project
   title: varchar('title', { length: 500 }).notNull(),
   description: text('description'),
-  type: varchar('type', { length: 50 }).notNull(), // TASK, BUG, STORY, EPIC, SUBTASK
+  type: varchar('type', { length: 50 }).$type<IssueType>().notNull(), // TASK, BUG, STORY, EPIC, SUBTASK
   status: varchar('status', { length: 50 }).default('TODO').notNull(), // Default to TODO
-  priority: varchar('priority', { length: 10 }).notNull(), // P0, P1, P2, P3, P4
+  priority: varchar('priority', { length: 10 }).$type<IssuePriority>().notNull(), // P0, P1, P2, P3, P4
   assigneeId: uuid('assignee_id').references(() => users.id, { onDelete: 'set null' }),
   reporterId: uuid('reporter_id')
     .references(() => users.id, { onDelete: 'restrict' })
