@@ -1,21 +1,16 @@
 import { Injectable, ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-
-export const DEV_USER = {
-  id: '11111111-0000-0000-0000-000000000001',
-  email: 'dev@projectflow.local',
-  name: 'Dev Lead',
-  avatarUrl: null,
-};
+import { Request } from 'express';
+import { DEV_USER, isDevAuthBypassEnabled } from '../auth.config';
+import { AuthenticatedUser } from '../auth.types';
 
 @Injectable()
 export class SupabaseAuthGuard extends AuthGuard('jwt') {
   canActivate(context: ExecutionContext) {
-    const request = context.switchToHttp().getRequest();
-    const authHeader = request.headers['authorization'];
+    const request = context.switchToHttp().getRequest<Request & { user?: AuthenticatedUser }>();
 
-    // In local development, allow requests without Bearer token to use the seeded dev user
-    if (!authHeader && process.env.NODE_ENV !== 'production') {
+    // Opt-in local development bypass: requests without a Bearer token use the seeded dev user
+    if (!request.headers.authorization && isDevAuthBypassEnabled()) {
       request.user = DEV_USER;
       return true;
     }
@@ -23,12 +18,11 @@ export class SupabaseAuthGuard extends AuthGuard('jwt') {
     return super.canActivate(context);
   }
 
-  handleRequest(err: any, user: any) {
+  handleRequest<TUser = AuthenticatedUser>(err: unknown, user: TUser | false): TUser {
     if (err || !user) {
-      if (process.env.NODE_ENV !== 'production') {
-        return DEV_USER;
-      }
-      throw err || new UnauthorizedException('Authentication required. Provide a valid Supabase Bearer token.');
+      throw err instanceof Error
+        ? err
+        : new UnauthorizedException('Authentication required. Provide a valid Supabase Bearer token.');
     }
     return user;
   }

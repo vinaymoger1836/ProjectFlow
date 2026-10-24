@@ -1,12 +1,47 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { eq } from 'drizzle-orm';
 import { Database, users } from '@projectflow/database';
 import { DRIZZLE_DB } from '../database/database.module';
-import { AuthenticatedUser } from './auth.types';
+import { AuthenticatedUser, JwtPayload } from './auth.types';
 
 @Injectable()
 export class AuthService {
-  constructor(@Inject(DRIZZLE_DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE_DB) private readonly db: Database,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  /**
+   * Verifies a raw Supabase access token (signature + expiry) and resolves the user.
+   * Used by transports that bypass Passport, such as the WebSocket gateway.
+   */
+  async verifyAccessToken(token: string): Promise<AuthenticatedUser> {
+    let payload: JwtPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<JwtPayload>(token);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired authentication token');
+    }
+    return this.resolveUserFromPayload(payload);
+  }
+
+  /**
+   * Maps verified Supabase JWT claims to a local user profile, provisioning it on first sight.
+   */
+  async resolveUserFromPayload(payload: JwtPayload): Promise<AuthenticatedUser> {
+    if (!payload || !payload.sub) {
+      throw new UnauthorizedException('Invalid or missing authentication token');
+    }
+
+    const email = payload.email || 'user@projectflow.local';
+    const name =
+      payload.user_metadata?.name || payload.user_metadata?.full_name || email.split('@')[0];
+    const avatarUrl =
+      payload.user_metadata?.avatar_url || payload.user_metadata?.picture || null;
+
+    return this.syncUser({ id: payload.sub, email, name, avatarUrl });
+  }
 
   /**
    * Auto-provisions or synchronizes the user profile in PostgreSQL
