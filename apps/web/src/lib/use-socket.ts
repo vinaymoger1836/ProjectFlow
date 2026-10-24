@@ -15,7 +15,7 @@ export interface ProjectPresence {
   users: PresenceUser[];
 }
 
-export function useProjectSocket(projectId?: string, currentUser?: PresenceUser) {
+export function useProjectSocket(projectId?: string) {
   const queryClient = useQueryClient();
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -24,21 +24,31 @@ export function useProjectSocket(projectId?: string, currentUser?: PresenceUser)
   useEffect(() => {
     if (!projectId) return;
 
-    // Initialize socket connection
+    // Initialize socket connection; the server verifies this token during the handshake
     const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
+      auth: (cb) => {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('supabase_token') : null;
+        cb(token ? { token } : {});
+      },
     });
     socketRef.current = socket;
 
     socket.on('connect', () => {
       setIsConnected(true);
-      // Join project room for targeted broadcasts with current user metadata
-      socket.emit('join:project', {
-        projectId,
-        user: currentUser || { id: 'dev-user', name: 'Dev Lead' },
+      // Join project room; presence identity is derived server-side from the verified token
+      socket.emit('join:project', { projectId }, (ack?: { status: string; message?: string }) => {
+        if (ack?.status === 'error') {
+          console.warn(`[Realtime] Could not join project room: ${ack.message}`);
+        }
       });
+    });
+
+    socket.on('connect_error', (err) => {
+      setIsConnected(false);
+      console.warn(`[Realtime] Connection rejected: ${err.message}`);
     });
 
     socket.on('disconnect', () => {
@@ -77,7 +87,7 @@ export function useProjectSocket(projectId?: string, currentUser?: PresenceUser)
       socket.disconnect();
       setIsConnected(false);
     };
-  }, [projectId, queryClient, currentUser]);
+  }, [projectId, queryClient]);
 
   return {
     socket: socketRef.current,
