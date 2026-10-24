@@ -138,7 +138,6 @@ export interface Milestone {
   name: string;
   description?: string | null;
   targetDate?: Date | null;
-  completionPercentage: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -154,9 +153,15 @@ export interface Release {
   targetDate?: Date | null;
   status: ReleaseStatus;
   releaseNotes?: string | null;
+  releasedAt?: Date | null;
+  shippedIssueCount?: number | null;
+  carriedOverIssueCount?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
+
+/** Stored link, read as "source <relation> target". "Blocked by" is the inverse of BLOCKS. */
+export type IssueRelationType = 'BLOCKS' | 'RELATES_TO' | 'DUPLICATES';
 
 // ==========================================
 // API & Common Types
@@ -419,6 +424,8 @@ export interface SprintVelocity {
   recent: SprintVelocityEntry[];
   /** Mean completed points of `recent`, or null without history. */
   averageVelocity: number | null;
+  /** Mean calendar length (start → completion) of `recent`, or null without history. */
+  averageSprintLengthDays: number | null;
 }
 
 export type SprintRolloverTarget = { type: 'BACKLOG' } | { type: 'SPRINT'; sprintId: string };
@@ -478,4 +485,192 @@ export interface SprintPlanProposal {
 export interface CopilotSprintPlanBlock {
   type: 'sprint_plan';
   plan: SprintPlanProposal;
+}
+
+// ==========================================
+// Milestones, Releases, Dependencies & Bulk Changes (Phase 6)
+// ==========================================
+
+export interface IssueLinkedIssue {
+  id: string;
+  issueKey: string;
+  title: string;
+  type: IssueType;
+  status: string;
+  priority: IssuePriority;
+}
+
+/** A link as seen from one issue; BLOCKED_BY / DUPLICATED_BY are inverse readings of stored rows. */
+export type IssueLinkKind = 'BLOCKS' | 'BLOCKED_BY' | 'RELATES_TO' | 'DUPLICATES' | 'DUPLICATED_BY';
+
+export interface IssueDependencyLink {
+  id: string;
+  kind: IssueLinkKind;
+  issue: IssueLinkedIssue;
+  createdAt: string;
+}
+
+/** Live tallies over the non-cancelled, non-subtask issues assigned to a milestone or release. */
+export interface WorkProgress {
+  issueCount: number;
+  doneIssueCount: number;
+  totalPoints: number;
+  donePoints: number;
+  unestimatedCount: number;
+  blockedCount: number;
+  openCriticalBugCount: number;
+  /** Done issues as a share of all issues (0–100). */
+  completionPercentage: number;
+}
+
+export type MilestoneHealth = 'COMPLETED' | 'ON_TRACK' | 'AT_RISK' | 'OVERDUE' | 'NO_TARGET';
+
+export interface MilestoneSummary {
+  id: string;
+  projectId: string;
+  name: string;
+  description: string | null;
+  targetDate: string | null;
+  progress: WorkProgress;
+  health: MilestoneHealth;
+  /** Deterministic explanation of `health`. */
+  healthReason: string;
+  /** Forecast from remaining points and recent velocity, when enough data exists. */
+  projectedCompletionDate: string | null;
+  /** Days the forecast lands after the target date (positive = late). */
+  slipDays: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReleaseSummary {
+  id: string;
+  projectId: string;
+  version: string;
+  name: string;
+  description: string | null;
+  status: ReleaseStatus;
+  targetDate: string | null;
+  releasedAt: string | null;
+  releaseNotes: string | null;
+  shippedIssueCount: number | null;
+  carriedOverIssueCount: number | null;
+  progress: WorkProgress;
+  /** Distinct milestones referenced by this release's issues. */
+  milestoneCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ReadinessCheckId =
+  | 'EMPTY_RELEASE'
+  | 'OPEN_CRITICAL_BUGS'
+  | 'BLOCKED_ISSUES'
+  | 'UNFINISHED_ISSUES'
+  | 'MISSING_ACCEPTANCE_CRITERIA'
+  | 'UNVERIFIED_ACCEPTANCE_CRITERIA'
+  | 'MILESTONES_AT_RISK'
+  | 'TARGET_DATE';
+
+export type ReadinessCheckStatus = 'PASS' | 'WARN' | 'FAIL';
+
+export interface ReadinessCheck {
+  id: ReadinessCheckId;
+  label: string;
+  status: ReadinessCheckStatus;
+  /** Critical failures gate READY_FOR_RELEASE / RELEASED until explicitly acknowledged. */
+  critical: boolean;
+  detail: string;
+  issueKeys: string[];
+}
+
+export type ReadinessVerdict = 'READY' | 'AT_RISK' | 'NOT_READY';
+
+/** Field changes a bulk operation may apply. `null` clears the field. */
+export interface BulkIssueChanges {
+  status?: StandardIssueStatus;
+  priority?: IssuePriority;
+  assigneeId?: string | null;
+  sprintId?: string | null;
+  milestoneId?: string | null;
+  releaseId?: string | null;
+}
+
+export type BulkChangeField = keyof BulkIssueChanges;
+
+export interface BulkIssueOperation {
+  issueId: string;
+  changes: BulkIssueChanges;
+}
+
+export interface BulkFieldDiff {
+  field: BulkChangeField;
+  from: string | null;
+  to: string | null;
+  fromLabel: string;
+  toLabel: string;
+}
+
+export interface BulkIssueDiff {
+  issueId: string;
+  issueKey: string;
+  title: string;
+  type: IssueType;
+  diffs: BulkFieldDiff[];
+}
+
+export interface BulkChangePreview {
+  /** Issues that would change (or did change, when applied). */
+  items: BulkIssueDiff[];
+  /** Issues already in the requested state. */
+  unchangedIssueKeys: string[];
+  applied: boolean;
+}
+
+export type BulkChangeSource = 'MANUAL' | 'AI_READINESS';
+
+/** A reviewable batch of changes proposed by the readiness evaluator. Nothing runs until applied. */
+export interface ReadinessSuggestion {
+  id: string;
+  title: string;
+  reason: string;
+  /** True when the AI layer recommends this fix. */
+  recommended: boolean;
+  operations: BulkIssueOperation[];
+}
+
+export interface ReleaseReadinessReport {
+  releaseId: string;
+  version: string;
+  verdict: ReadinessVerdict;
+  /** Weighted share of passing checks (0–100); critical checks weigh triple. */
+  score: number;
+  checks: ReadinessCheck[];
+  criticalFailureCount: number;
+  evaluatedAt: string;
+  /** AI narrative on delivery risk; null for the deterministic-only evaluation. */
+  narrative: string | null;
+  risks: string[];
+  suggestions: ReadinessSuggestion[];
+  modelUsed: string;
+}
+
+export interface ReleaseShipResult {
+  release: ReleaseSummary;
+  carriedOverCount: number;
+  carriedOverTo: { type: 'NONE' } | { type: 'RELEASE'; releaseId: string; version: string };
+}
+
+export interface ReleaseNotesSection {
+  title: string;
+  items: { issueKey: string; text: string }[];
+}
+
+/** Generated draft; persisted only when the user saves it to the release. */
+export interface ReleaseNotesDraft {
+  releaseId: string;
+  markdown: string;
+  sections: ReleaseNotesSection[];
+  modelUsed: string;
+  generatedAt: string;
 }

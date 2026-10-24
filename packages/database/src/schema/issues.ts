@@ -1,9 +1,11 @@
-import { pgTable, uuid, varchar, text, integer, timestamp, boolean, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, integer, timestamp, boolean, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { projects } from './projects';
 import { users } from './users';
 import { sprints } from './sprints';
-import type { IssuePriority, IssueType } from '@projectflow/types';
+import { milestones } from './milestones';
+import { releases } from './releases';
+import type { IssuePriority, IssueRelationType, IssueType } from '@projectflow/types';
 import { tsvector } from './custom-types';
 
 export const issues = pgTable('issues', {
@@ -25,8 +27,9 @@ export const issues = pgTable('issues', {
   parentIssueId: uuid('parent_issue_id'),
   // Current sprint; null = backlog. Deleting a sprint returns its issues to the backlog.
   sprintId: uuid('sprint_id').references(() => sprints.id, { onDelete: 'set null' }),
-  milestoneId: uuid('milestone_id'),
-  releaseId: uuid('release_id'),
+  // At most one milestone and one release (ADR-018); deleting either unassigns its issues.
+  milestoneId: uuid('milestone_id').references(() => milestones.id, { onDelete: 'set null' }),
+  releaseId: uuid('release_id').references(() => releases.id, { onDelete: 'set null' }),
   storyPoints: integer('story_points'),
   estimateHours: integer('estimate_hours'),
   dueDate: timestamp('due_date', { withTimezone: true }),
@@ -43,6 +46,8 @@ export const issues = pgTable('issues', {
 }, (table) => [
   index('issues_project_id_idx').on(table.projectId),
   index('issues_sprint_id_idx').on(table.sprintId),
+  index('issues_milestone_id_idx').on(table.milestoneId),
+  index('issues_release_id_idx').on(table.releaseId),
   index('issues_search_vector_idx').using('gin', table.searchVector),
 ]).enableRLS();
 
@@ -86,6 +91,10 @@ export const issueLabels = pgTable('issue_labels', {
     .notNull(),
 }).enableRLS();
 
+/**
+ * Directed issue links, read as "source <relation> target". Only canonical relations are
+ * stored: "blocked by" / "depends on" is the inverse of BLOCKS (ADR-019).
+ */
 export const issueDependencies = pgTable('issue_dependencies', {
   id: uuid('id').defaultRandom().primaryKey(),
   sourceIssueId: uuid('source_issue_id')
@@ -94,9 +103,12 @@ export const issueDependencies = pgTable('issue_dependencies', {
   targetIssueId: uuid('target_issue_id')
     .references(() => issues.id, { onDelete: 'cascade' })
     .notNull(),
-  relationType: varchar('relation_type', { length: 50 }).notNull(), // BLOCKS, BLOCKED_BY, RELATES_TO, DUPLICATES
+  relationType: varchar('relation_type', { length: 50 }).$type<IssueRelationType>().notNull(), // BLOCKS, RELATES_TO, DUPLICATES
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-}).enableRLS();
+}, (table) => [
+  uniqueIndex('issue_dependencies_link_idx').on(table.sourceIssueId, table.targetIssueId, table.relationType),
+  index('issue_dependencies_target_idx').on(table.targetIssueId),
+]).enableRLS();
 
 export const issueAttachments = pgTable('issue_attachments', {
   id: uuid('id').defaultRandom().primaryKey(),

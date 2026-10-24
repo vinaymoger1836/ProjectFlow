@@ -1,7 +1,10 @@
-import { pgTable, uuid, varchar, text, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, index } from 'drizzle-orm/pg-core';
 import { projects } from './projects';
-import { issues } from './issues';
 
+/**
+ * Cross-sprint goals. Membership lives on `issues.milestone_id` (an issue counts toward at
+ * most one milestone); completion and slip status are computed live from those issues.
+ */
 export const milestones = pgTable('milestones', {
   id: uuid('id').defaultRandom().primaryKey(),
   projectId: uuid('project_id')
@@ -10,18 +13,8 @@ export const milestones = pgTable('milestones', {
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   targetDate: timestamp('target_date', { withTimezone: true }),
-  completionPercentage: integer('completion_percentage').default(0).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}).enableRLS();
-
-export const milestoneIssues = pgTable('milestone_issues', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  milestoneId: uuid('milestone_id')
-    .references(() => milestones.id, { onDelete: 'cascade' })
-    .notNull(),
-  issueId: uuid('issue_id')
-    .references(() => issues.id, { onDelete: 'cascade' })
-    .notNull(),
-  addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
-}).enableRLS();
+}, (table) => [
+  index('milestones_project_id_idx').on(table.projectId),
+]).enableRLS();
