@@ -23,11 +23,16 @@ import {
   Radio,
   SlidersHorizontal,
   RefreshCw,
+  Target,
+  CalendarRange,
+  ArrowRight,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useProjectSocket } from '@/lib/use-socket';
 import { KanbanColumn, ColumnDefinition } from './kanban-column';
 import { KanbanCard, KanbanIssueItem } from './kanban-card';
+import { CapacityBar } from '../sprints/capacity-bar';
+import { formatSprintDateRange, daysRemaining } from '../sprints/sprint-utils';
 import { cn } from '@/lib/utils';
 
 const DEFAULT_COLUMNS: ColumnDefinition[] = [
@@ -67,35 +72,51 @@ interface KanbanBoardProps {
   projectId: string;
   onSelectIssue: (issueKey: string) => void;
   onOpenCreateModal: (defaultStatus?: string) => void;
+  /** Navigates to Backlog & Sprints (shown when no sprint is active). */
+  onOpenBacklog?: () => void;
 }
 
 export function KanbanBoard({
   projectId,
   onSelectIssue,
   onOpenCreateModal,
+  onOpenBacklog,
 }: KanbanBoardProps) {
   const queryClient = useQueryClient();
   const [activeIssue, setActiveIssue] = useState<KanbanIssueItem | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState('ALL');
+  const [pickedSprintId, setPickedSprintId] = useState<string | null>(null);
 
   // Real-time WebSockets synchronization and presence tracking
   const { isConnected, presence } = useProjectSocket(projectId);
 
-  // Fetch live project issues
+  // The board shows one active sprint at a time; several may run in parallel
+  const { data: sprints = [], isLoading: sprintsLoading } = useQuery({
+    queryKey: ['sprints', projectId],
+    queryFn: () => api.listSprints(projectId),
+  });
+  const activeSprints = useMemo(() => sprints.filter((s) => s.status === 'ACTIVE'), [sprints]);
+  const selectedSprint = activeSprints.find((s) => s.id === pickedSprintId) ?? activeSprints[0] ?? null;
+
+  const boardQueryKey = ['issues', projectId, 'board', selectedSprint?.id ?? null] as const;
+
+  // Fetch live issues of the selected sprint
   const {
     data: issues = [],
-    isLoading,
+    isLoading: issuesLoading,
     isRefetching,
     refetch,
   } = useQuery({
-    queryKey: ['issues', projectId],
+    queryKey: boardQueryKey,
     queryFn: async () => {
-      const res = await api.listIssues(projectId, { limit: 100 });
+      const res = await api.listIssues(projectId, { sprintId: selectedSprint!.id, limit: 100 });
       return (res?.items || []) as KanbanIssueItem[];
     },
+    enabled: Boolean(selectedSprint),
   });
+  const isLoading = sprintsLoading || (Boolean(selectedSprint) && issuesLoading);
 
   // Filter issues based on search and filters
   const filteredIssues = useMemo(() => {
@@ -149,6 +170,8 @@ export function KanbanBoard({
     onSuccess: (updated) => {
       queryClient.setQueryData(['issue', updated.issueKey], updated);
       queryClient.setQueryData(['issue', updated.id], updated);
+      // Moving to/from DONE changes the sprint's completed points
+      queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
     },
   });
 
@@ -203,7 +226,7 @@ export function KanbanBoard({
 
     if (targetStatus && targetStatus !== draggedIssue.status) {
       // Optimistic cache update
-      queryClient.setQueryData<KanbanIssueItem[]>(['issues', projectId], (old = []) => {
+      queryClient.setQueryData<KanbanIssueItem[]>(boardQueryKey, (old = []) => {
         return old.map((item) =>
           item.id === activeId ? { ...item, status: targetStatus! } : item,
         );
@@ -327,7 +350,76 @@ export function KanbanBoard({
         </div>
       </div>
 
-      {/* Kanban Drag-and-Drop Columns Area */}
+      {/* Active Sprint Header */}
+      {selectedSprint && (
+        <div className="flex flex-col md:flex-row md:items-center gap-3 bg-card border border-emerald-500/25 rounded-xl px-4 py-3 shrink-0 animate-fade-in">
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              {activeSprints.length > 1 ? (
+                <select
+                  value={selectedSprint.id}
+                  onChange={(e) => setPickedSprintId(e.target.value)}
+                  aria-label="Active sprint"
+                  className="text-sm font-semibold bg-background border border-input rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                >
+                  {activeSprints.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <h3 className="text-sm font-semibold">{selectedSprint.name}</h3>
+              )}
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Active
+              </span>
+              <SprintTimeline start={selectedSprint.startDate} end={selectedSprint.endDate} />
+            </div>
+            {selectedSprint.goal && (
+              <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                <Target className="h-3 w-3 mt-0.5 shrink-0" />
+                <span className="truncate">{selectedSprint.goal}</span>
+              </p>
+            )}
+          </div>
+          <div className="w-full md:w-72 space-y-1">
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>
+                {selectedSprint.progress.doneIssueCount}/{selectedSprint.progress.issueCount} issues done
+              </span>
+              <span>Committed {selectedSprint.committedPoints ?? 0} pts</span>
+            </div>
+            <CapacityBar
+              points={selectedSprint.progress.totalPoints}
+              donePoints={selectedSprint.progress.donePoints}
+              capacity={selectedSprint.capacityPoints}
+            />
+          </div>
+        </div>
+      )}
+
+      {!sprintsLoading && !selectedSprint ? (
+        <div className="p-12 text-center rounded-xl border border-dashed border-border bg-card/40 space-y-3">
+          <Target className="h-8 w-8 text-primary mx-auto" />
+          <h3 className="font-semibold text-base">No active sprint</h3>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            The board shows the work of an active sprint. Plan a sprint in the backlog, then start it to begin tracking
+            progress here.
+          </p>
+          {onOpenBacklog && (
+            <button
+              type="button"
+              onClick={onOpenBacklog}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              Go to Backlog &amp; Sprints
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      ) : (
       <div className="flex-1 overflow-x-auto pb-4">
         {isLoading ? (
           <div className="flex gap-4">
@@ -375,6 +467,24 @@ export function KanbanBoard({
           </DndContext>
         )}
       </div>
+      )}
     </div>
+  );
+}
+
+function SprintTimeline({ start, end }: { start: string | null; end: string | null }) {
+  const range = formatSprintDateRange(start, end);
+  const remaining = daysRemaining(end);
+  if (!range) return null;
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+      <CalendarRange className="h-3 w-3" />
+      {range}
+      {remaining !== null && (
+        <span className={cn('ml-1', remaining < 0 ? 'text-red-400' : remaining <= 2 ? 'text-amber-400' : '')}>
+          · {remaining < 0 ? `${Math.abs(remaining)}d overdue` : `${remaining}d left`}
+        </span>
+      )}
+    </span>
   );
 }

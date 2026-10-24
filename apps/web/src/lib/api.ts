@@ -65,6 +65,7 @@ export interface IssueQueryParams {
   status?: string;
   priority?: IssuePriority;
   assigneeId?: string;
+  sprintId?: string;
   search?: string;
   includeArchived?: boolean;
   page?: number;
@@ -146,6 +147,7 @@ export const api = {
     if (params.status) searchParams.set('status', params.status);
     if (params.priority) searchParams.set('priority', params.priority);
     if (params.assigneeId) searchParams.set('assigneeId', params.assigneeId);
+    if (params.sprintId) searchParams.set('sprintId', params.sprintId);
     if (params.search) searchParams.set('search', params.search);
     if (params.includeArchived) searchParams.set('includeArchived', 'true');
     if (params.page) searchParams.set('page', String(params.page));
