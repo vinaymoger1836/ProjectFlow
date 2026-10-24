@@ -11,6 +11,7 @@
     "db:migrate": "pnpm --filter @projectflow/database migrate",
     "db:push": "pnpm --filter @projectflow/database push",
     "db:seed": "pnpm --filter @projectflow/database seed",
+    "db:extensions": "pnpm --filter @projectflow/database extensions",
     "db:studio": "pnpm --filter @projectflow/database studio"
   },
   "devDependencies": {
