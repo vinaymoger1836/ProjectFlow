@@ -201,7 +201,7 @@ async function seed() {
 
   // 9. Issues
   console.log('Inserting Issues...');
-  const seedIssues = [
+  const seedIssues: (typeof issues.$inferInsert)[] = [
     {
       id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
       projectId,
