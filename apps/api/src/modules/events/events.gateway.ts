@@ -2,37 +2,87 @@ import {
   WebSocketGateway,
   WebSocketServer,
   SubscribeMessage,
-  OnGatewayConnection,
+  OnGatewayInit,
   OnGatewayDisconnect,
   ConnectedSocket,
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import { AuthService } from '../auth/auth.service';
+import { ProjectAccessService } from '../auth/project-access.service';
+import { AuthenticatedUser } from '../auth/auth.types';
+import { DEV_USER, isDevAuthBypassEnabled } from '../auth/auth.config';
+import { UUID_REGEX } from '../../common/validators/is-entity-id.decorator';
+
+interface PresenceUser {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+}
+
+interface SocketData {
+  user: AuthenticatedUser;
+}
+
+type AuthedSocket = Socket & { data: SocketData };
+
+type RoomAck = { status: 'joined' | 'left'; room: string } | { status: 'error'; message: string };
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    // Resolved per handshake so the value from .env (loaded by ConfigModule at bootstrap) is honoured
+    origin: (
+      requestOrigin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      const allowedOrigin = process.env.WEB_URL || 'http://localhost:3000';
+      callback(null, !requestOrigin || requestOrigin === allowedOrigin);
+    },
     credentials: true,
   },
 })
-export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class EventsGateway implements OnGatewayInit, OnGatewayDisconnect {
   private readonly logger = new Logger(EventsGateway.name);
 
   @WebSocketServer()
   server: Server;
 
   // Track room presence: projectId -> Map<socketId, UserInfo>
-  private readonly projectPresences = new Map<string, Map<string, { id: string; name: string; avatarUrl?: string | null }>>();
+  private readonly projectPresences = new Map<string, Map<string, PresenceUser>>();
   // Track client's joined projects: socketId -> Set<projectId>
   private readonly clientProjects = new Map<string, Set<string>>();
 
-  handleConnection(client: Socket) {
-    this.logger.log(`Client connected: ${client.id}`);
+  constructor(
+    private readonly authService: AuthService,
+    private readonly projectAccess: ProjectAccessService,
+  ) {}
+
+  /**
+   * Authenticates every socket during the handshake, before any event handler can run.
+   * Clients pass their Supabase access token via `io(url, { auth: { token } })`.
+   */
+  afterInit(server: Server) {
+    server.use(async (socket: Socket, next) => {
+      const token: unknown = socket.handshake.auth?.token;
+
+      try {
+        if (typeof token === 'string' && token.length > 0) {
+          socket.data.user = await this.authService.verifyAccessToken(token);
+        } else if (isDevAuthBypassEnabled()) {
+          socket.data.user = DEV_USER;
+        } else {
+          throw new Error('Authentication required');
+        }
+        next();
+      } catch (err) {
+        this.logger.warn(`Rejected socket ${socket.id}: ${err instanceof Error ? err.message : 'unknown error'}`);
+        next(new Error('Unauthorized'));
+      }
+    });
   }
 
-  handleDisconnect(client: Socket) {
-    this.logger.log(`Client disconnected: ${client.id}`);
+  handleDisconnect(client: AuthedSocket) {
     const joinedProjects = this.clientProjects.get(client.id);
     if (joinedProjects) {
       for (const projectId of joinedProjects) {
@@ -47,59 +97,72 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('join:project')
-  handleJoinProject(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() data: { projectId: string; user?: { id: string; name: string; avatarUrl?: string | null } },
-  ) {
-    if (data?.projectId) {
-      const { projectId, user } = data;
-      const roomName = `project:${projectId}`;
-      client.join(roomName);
-
-      // Track presence
-      if (!this.projectPresences.has(projectId)) {
-        this.projectPresences.set(projectId, new Map());
-      }
-      const room = this.projectPresences.get(projectId)!;
-      room.set(client.id, user || { id: client.id, name: 'Active Collaborator' });
-
-      if (!this.clientProjects.has(client.id)) {
-        this.clientProjects.set(client.id, new Set());
-      }
-      this.clientProjects.get(client.id)!.add(projectId);
-
-      this.logger.log(`Client ${client.id} (${user?.name || 'Anonymous'}) joined ${roomName}`);
-      this.broadcastPresence(projectId);
-
-      return { status: 'joined', room: roomName };
+  async handleJoinProject(
+    @ConnectedSocket() client: AuthedSocket,
+    @MessageBody() data: { projectId?: unknown },
+  ): Promise<RoomAck> {
+    const projectId = data?.projectId;
+    if (typeof projectId !== 'string' || !UUID_REGEX.test(projectId)) {
+      return { status: 'error', message: 'A valid projectId is required.' };
     }
+
+    const user = client.data.user;
+    try {
+      await this.projectAccess.assertProjectAccess(user.id, projectId);
+    } catch {
+      return { status: 'error', message: 'Access denied for this project.' };
+    }
+
+    const roomName = `project:${projectId}`;
+    await client.join(roomName);
+
+    // Presence identity always comes from the verified token, never from the client payload
+    if (!this.projectPresences.has(projectId)) {
+      this.projectPresences.set(projectId, new Map());
+    }
+    this.projectPresences.get(projectId)!.set(client.id, {
+      id: user.id,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+    });
+
+    if (!this.clientProjects.has(client.id)) {
+      this.clientProjects.set(client.id, new Set());
+    }
+    this.clientProjects.get(client.id)!.add(projectId);
+
+    this.logger.log(`Client ${client.id} (${user.name}) joined ${roomName}`);
+    this.broadcastPresence(projectId);
+
+    return { status: 'joined', room: roomName };
   }
 
   @SubscribeMessage('leave:project')
-  handleLeaveProject(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() data: { projectId: string },
-  ) {
-    if (data?.projectId) {
-      const { projectId } = data;
-      const roomName = `project:${projectId}`;
-      client.leave(roomName);
-
-      const room = this.projectPresences.get(projectId);
-      if (room) {
-        room.delete(client.id);
-        this.broadcastPresence(projectId);
-      }
-
-      this.clientProjects.get(client.id)?.delete(projectId);
-      this.logger.log(`Client ${client.id} left ${roomName}`);
-      return { status: 'left', room: roomName };
+  async handleLeaveProject(
+    @ConnectedSocket() client: AuthedSocket,
+    @MessageBody() data: { projectId?: unknown },
+  ): Promise<RoomAck> {
+    const projectId = data?.projectId;
+    if (typeof projectId !== 'string') {
+      return { status: 'error', message: 'A valid projectId is required.' };
     }
+
+    const roomName = `project:${projectId}`;
+    await client.leave(roomName);
+
+    const room = this.projectPresences.get(projectId);
+    if (room) {
+      room.delete(client.id);
+      this.broadcastPresence(projectId);
+    }
+
+    this.clientProjects.get(client.id)?.delete(projectId);
+    return { status: 'left', room: roomName };
   }
 
   private broadcastPresence(projectId: string) {
     const room = this.projectPresences.get(projectId);
-    const usersMap = new Map<string, { id: string; name: string; avatarUrl?: string | null }>();
+    const usersMap = new Map<string, PresenceUser>();
     if (room) {
       for (const u of room.values()) {
         usersMap.set(u.id, u);
@@ -115,11 +178,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-
   /**
    * Broadcasts issue created event to all clients viewing the project.
    */
-  broadcastIssueCreated(projectId: string, issue: any) {
+  broadcastIssueCreated(projectId: string, issue: unknown) {
     if (this.server) {
       this.server.to(`project:${projectId}`).emit('issue:created', issue);
     }
@@ -128,7 +190,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /**
    * Broadcasts issue updated event (e.g. status transition, priority change).
    */
-  broadcastIssueUpdated(projectId: string, issue: any) {
+  broadcastIssueUpdated(projectId: string, issue: unknown) {
     if (this.server) {
       this.server.to(`project:${projectId}`).emit('issue:updated', issue);
     }
@@ -137,7 +199,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /**
    * Broadcasts comment added event.
    */
-  broadcastCommentAdded(projectId: string, issueId: string, comment: any) {
+  broadcastCommentAdded(projectId: string, issueId: string, comment: unknown) {
     if (this.server) {
       this.server.to(`project:${projectId}`).emit('comment:added', { issueId, comment });
     }
