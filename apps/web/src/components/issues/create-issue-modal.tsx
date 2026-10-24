@@ -12,6 +12,8 @@ interface CreateIssueModalProps {
   projectKey?: string;
   isOpen: boolean;
   defaultStatus?: string;
+  /** Sprint the new issue joins (e.g. when created from the sprint board). */
+  sprintId?: string;
   onClose: () => void;
   onCreated?: (issueKey: string) => void;
 }
@@ -22,6 +24,7 @@ export function CreateIssueModal({
   projectKey = 'PAY',
   isOpen,
   defaultStatus = 'TODO',
+  sprintId,
   onClose,
   onCreated,
 }: CreateIssueModalProps) {
@@ -83,6 +86,7 @@ export function CreateIssueModal({
         status: status || defaultStatus || 'TODO',
         assigneeId: assigneeId || undefined,
         parentIssueId: parentIssueId || undefined,
+        sprintId: sprintId || undefined,
         storyPoints: storyPoints ? parseInt(storyPoints, 10) : undefined,
         estimateHours: estimateHours ? parseInt(estimateHours, 10) : undefined,
         dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
@@ -92,6 +96,7 @@ export function CreateIssueModal({
 
     onSuccess: (newIssue) => {
       queryClient.invalidateQueries({ queryKey: ['issues', projectId] });
+      if (sprintId) queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
       // Reset form
       setTitle('');
       setDescription('');

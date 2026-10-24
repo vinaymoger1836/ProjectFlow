@@ -71,7 +71,8 @@ const DEFAULT_COLUMNS: ColumnDefinition[] = [
 interface KanbanBoardProps {
   projectId: string;
   onSelectIssue: (issueKey: string) => void;
-  onOpenCreateModal: (defaultStatus?: string) => void;
+  /** sprintId is passed so issues created from the board land in the visible sprint. */
+  onOpenCreateModal: (defaultStatus?: string, sprintId?: string) => void;
   /** Navigates to Backlog & Sprints (shown when no sprint is active). */
   onOpenBacklog?: () => void;
 }
@@ -341,7 +342,7 @@ export function KanbanBoard({
           {/* Quick Create Button */}
           <button
             type="button"
-            onClick={() => onOpenCreateModal()}
+            onClick={() => onOpenCreateModal(undefined, selectedSprint?.id)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors shadow-2xs"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -449,7 +450,7 @@ export function KanbanBoard({
                   column={col}
                   issues={columnIssuesMap.get(col.id) || []}
                   onSelectIssue={onSelectIssue}
-                  onQuickAdd={(status) => onOpenCreateModal(status)}
+                  onQuickAdd={(status) => onOpenCreateModal(status, selectedSprint?.id)}
                 />
               ))}
             </div>
