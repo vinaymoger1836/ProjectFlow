@@ -18,9 +18,9 @@ import {
   issueComments,
   issueAttachments,
   activities,
-  sprints,
 } from '@projectflow/database';
 import { DRIZZLE_DB } from '../database/database.module';
+import { AssignmentTargetsService } from './assignment-targets.service';
 import { CreateIssueDto } from './dto/create-issue.dto';
 import { UpdateIssueDto } from './dto/update-issue.dto';
 import { IssueQueryDto } from './dto/issue-query.dto';
@@ -50,6 +50,7 @@ export class IssuesService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly eventEmitter: EventEmitter2,
+    private readonly assignmentTargets: AssignmentTargetsService,
     @Optional() private readonly eventsGateway?: EventsGateway,
   ) {}
 
@@ -59,9 +60,7 @@ export class IssuesService {
    */
   async createIssue(userId: string, projectId: string, dto: CreateIssueDto) {
     const project = await this.getProjectAndVerifyAccess(userId, projectId);
-    if (dto.sprintId) {
-      await this.assertSprintAssignable(projectId, dto.sprintId);
-    }
+    await this.assertAssignmentTargets(projectId, dto);
 
     const result = await this.db.transaction(async (tx) => {
       // 1. Atomically increment project issueCounter to prevent sequence race conditions
@@ -182,6 +181,14 @@ export class IssuesService {
 
     if (query.sprintId) {
       conditions.push(eq(issues.sprintId, query.sprintId));
+    }
+
+    if (query.milestoneId) {
+      conditions.push(eq(issues.milestoneId, query.milestoneId));
+    }
+
+    if (query.releaseId) {
+      conditions.push(eq(issues.releaseId, query.releaseId));
     }
 
     if (query.search && query.search.trim().length > 0) {
@@ -385,9 +392,7 @@ export class IssuesService {
     }
 
     const project = await this.getProjectAndVerifyAccess(userId, existing.projectId);
-    if (dto.sprintId) {
-      await this.assertSprintAssignable(existing.projectId, dto.sprintId);
-    }
+    await this.assertAssignmentTargets(existing.projectId, dto);
 
     const result = await this.db.transaction(async (tx) => {
       const updates: Partial<typeof issues.$inferInsert> = {
@@ -896,21 +901,16 @@ export class IssuesService {
   }
 
   /**
-   * Internal helper: an issue may only join a PLANNED or ACTIVE sprint of its own project.
+   * Internal helper: sprint, milestone, and release targets must belong to the issue's project
+   * and still accept work.
    */
-  private async assertSprintAssignable(projectId: string, sprintId: string) {
-    const [sprint] = await this.db
-      .select({ name: sprints.name, status: sprints.status })
-      .from(sprints)
-      .where(and(eq(sprints.id, sprintId), eq(sprints.projectId, projectId)))
-      .limit(1);
-
-    if (!sprint) {
-      throw new BadRequestException(`Sprint '${sprintId}' does not exist in this project.`);
-    }
-    if (sprint.status !== 'PLANNED' && sprint.status !== 'ACTIVE') {
-      throw new BadRequestException(`${sprint.name} is ${sprint.status.toLowerCase()} and cannot receive issues.`);
-    }
+  private async assertAssignmentTargets(
+    projectId: string,
+    dto: { sprintId?: string | null; milestoneId?: string | null; releaseId?: string | null },
+  ) {
+    if (dto.sprintId) await this.assignmentTargets.assertSprint(projectId, dto.sprintId);
+    if (dto.milestoneId) await this.assignmentTargets.assertMilestone(projectId, dto.milestoneId);
+    if (dto.releaseId) await this.assignmentTargets.assertRelease(projectId, dto.releaseId);
   }
 
   /**

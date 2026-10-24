@@ -37,6 +37,7 @@ const ASSIGNABLE_SPRINT_STATUSES: SprintStatus[] = ['PLANNED', 'ACTIVE'];
 
 const DEFAULT_SPRINT_LENGTH_DAYS = 14;
 const VELOCITY_WINDOW = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const STATUS_ORDER: Record<SprintStatus, number> = { ACTIVE: 0, PLANNED: 1, COMPLETED: 2, CANCELLED: 3 };
 
@@ -331,7 +332,16 @@ export class SprintsService {
         ? Math.round(recent.reduce((sum, r) => sum + r.completedPoints, 0) / recent.length)
         : null;
 
-    return { recent, averageVelocity };
+    const lengths = rows
+      .map((r) => {
+        const start = r.startedAt ?? r.startDate;
+        return start && r.completedAt ? (r.completedAt.getTime() - start.getTime()) / DAY_MS : null;
+      })
+      .filter((days): days is number => days !== null && days > 0);
+    const averageSprintLengthDays =
+      lengths.length > 0 ? Math.max(1, Math.round(lengths.reduce((sum, d) => sum + d, 0) / lengths.length)) : null;
+
+    return { recent, averageVelocity, averageSprintLengthDays };
   }
 
   async nextSprintName(projectId: string): Promise<string> {

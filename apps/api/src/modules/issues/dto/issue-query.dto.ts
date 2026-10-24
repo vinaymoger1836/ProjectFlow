@@ -44,6 +44,16 @@ export class IssueQueryDto {
   @IsEntityId()
   sprintId?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by milestone UUID' })
+  @IsOptional()
+  @IsEntityId()
+  milestoneId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by release UUID' })
+  @IsOptional()
+  @IsEntityId()
+  releaseId?: string;
+
   @ApiPropertyOptional({ description: 'Search title, description, or issue key' })
   @IsOptional()
   @IsString()

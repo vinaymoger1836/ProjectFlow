@@ -104,6 +104,24 @@ export function GenerativeMarkdown({
           );
         }
 
+        // Heading 1: # Title
+        if (trimmed.startsWith('# ')) {
+          return (
+            <h2 key={idx} className="font-bold text-foreground text-base">
+              {renderInline(trimmed.slice(2))}
+            </h2>
+          );
+        }
+
+        // Whole-line emphasis: _Released 2026-11-03_
+        if (trimmed.length > 2 && trimmed.startsWith('_') && trimmed.endsWith('_')) {
+          return (
+            <p key={idx} className="italic text-muted-foreground">
+              {renderInline(trimmed.slice(1, -1))}
+            </p>
+          );
+        }
+
         // Heading 2: ## Title
         if (trimmed.startsWith('## ')) {
           return (

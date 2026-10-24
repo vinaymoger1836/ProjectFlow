@@ -75,6 +75,7 @@ function IssuesViewContent({
     <div className="space-y-6">
       {/* Issues Table */}
       <IssueTable
+        projectId={projectId}
         issues={issues}
         isLoading={isLoading}
         onSelectIssue={handleSelectIssue}

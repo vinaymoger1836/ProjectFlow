@@ -11,6 +11,8 @@ import { AiModule } from './modules/ai/ai.module';
 import { EventsModule } from './modules/events/events.module';
 import { SearchModule } from './modules/search/search.module';
 import { SprintsModule } from './modules/sprints/sprints.module';
+import { MilestonesModule } from './modules/milestones/milestones.module';
+import { ReleasesModule } from './modules/releases/releases.module';
 import { HealthController } from './modules/health/health.controller';
 
 @Module({
@@ -39,6 +41,8 @@ import { HealthController } from './modules/health/health.controller';
     EventsModule,
     SearchModule,
     SprintsModule,
+    MilestonesModule,
+    ReleasesModule,
   ],
   controllers: [HealthController],
   providers: [],

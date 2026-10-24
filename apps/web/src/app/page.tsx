@@ -12,11 +12,11 @@ import {
   Layers,
   Settings,
   Bell,
-  CheckCircle2,
   Clock,
   AlertTriangle,
   Plus,
   ArrowRight,
+  Rocket,
 } from 'lucide-react';
 import { IssuesView } from '@/components/issues/issues-view';
 import { KanbanBoard } from '@/components/kanban/kanban-board';
@@ -26,9 +26,11 @@ import { AiCopilotSideDrawer } from '@/components/ai/ai-copilot-side-drawer';
 import { SearchModal, useSearchShortcut } from '@/components/search/search-modal';
 import { BacklogView } from '@/components/sprints/backlog-view';
 import { ActiveSprintCard } from '@/components/sprints/active-sprint-card';
+import { ReleasesView } from '@/components/releases/releases-view';
+import { NextReleaseCard } from '@/components/releases/next-release-card';
 import { cn } from '@/lib/utils';
 
-type NavTab = 'overview' | 'issues' | 'board' | 'sprints';
+type NavTab = 'overview' | 'issues' | 'board' | 'sprints' | 'releases';
 
 function HomePageContent() {
   const searchParams = useSearchParams();
@@ -161,6 +163,20 @@ function HomePageContent() {
             >
               <Calendar className={cn('h-4 w-4', activeTab === 'sprints' ? 'text-primary' : '')} />
               <span>Backlog & Sprints</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('releases')}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium text-sm transition-colors text-left',
+                activeTab === 'releases'
+                  ? 'bg-secondary text-foreground font-semibold shadow-xs'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              <Rocket className={cn('h-4 w-4', activeTab === 'releases' ? 'text-primary' : '')} />
+              <span>Releases & Milestones</span>
             </button>
 
             <div className="pt-4 text-xs font-semibold text-muted-foreground px-3 py-2 uppercase tracking-wider">
@@ -340,14 +356,7 @@ function HomePageContent() {
                   <p className="text-xs text-muted-foreground">0 critical blockers • 1 P1 bug</p>
                 </div>
 
-                <div className="p-5 rounded-lg border border-border bg-card shadow-sm space-y-2">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Target Release v2.4</span>
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  </div>
-                  <div className="text-2xl font-bold">Oct 12, 2026</div>
-                  <p className="text-xs text-muted-foreground">2 milestones active • 84% readiness</p>
-                </div>
+                <NextReleaseCard projectId={projectId} onOpen={() => setActiveTab('releases')} />
               </div>
 
               {/* Recent Issues Preview */}
@@ -422,6 +431,18 @@ function HomePageContent() {
                 </p>
               </div>
               <BacklogView projectId={projectId} onSelectIssue={handleSelectIssue} />
+            </div>
+          )}
+
+          {activeTab === 'releases' && (
+            <div className="space-y-4">
+              <div className="border-b border-border pb-2">
+                <h3 className="text-lg font-bold">Releases & Milestones</h3>
+                <p className="text-xs text-muted-foreground">
+                  Track milestone slip risk, check release readiness, apply AI-suggested fixes after reviewing the diff, and generate release notes.
+                </p>
+              </div>
+              <ReleasesView projectId={projectId} onSelectIssue={handleSelectIssue} />
             </div>
           )}
         </div>

@@ -63,9 +63,26 @@ export function useProjectSocket(projectId?: string) {
     });
 
     // Listen for live updates from other team members / background workers
+    // Release and milestone progress are derived from their issues, so issue events refresh them too
+    const invalidatePlanning = () => {
+      queryClient.invalidateQueries({ queryKey: ['releases', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
+    };
+
     socket.on('issue:created', () => {
       queryClient.invalidateQueries({ queryKey: ['issues', projectId] });
       queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
+      invalidatePlanning();
+    });
+
+    socket.on('release:updated', () => {
+      invalidatePlanning();
+      queryClient.invalidateQueries({ queryKey: ['issues', projectId] });
+    });
+
+    socket.on('milestone:updated', () => {
+      invalidatePlanning();
+      queryClient.invalidateQueries({ queryKey: ['issues', projectId] });
     });
 
     // Sprint lifecycle and bulk membership changes affect both sprint tallies and issue lists
@@ -77,8 +94,10 @@ export function useProjectSocket(projectId?: string) {
     socket.on('issue:updated', (updatedIssue) => {
       queryClient.invalidateQueries({ queryKey: ['issues', projectId] });
       queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
+      invalidatePlanning();
       if (updatedIssue?.id) {
         queryClient.invalidateQueries({ queryKey: ['issue', updatedIssue.id] });
+        queryClient.invalidateQueries({ queryKey: ['issue-dependencies', updatedIssue.id] });
       }
       if (updatedIssue?.issueKey) {
         queryClient.invalidateQueries({ queryKey: ['issue', updatedIssue.issueKey] });

@@ -10,6 +10,7 @@ import {
   ColumnDef,
   SortingState,
   VisibilityState,
+  RowSelectionState,
   flexRender,
 } from '@tanstack/react-table';
 import {
@@ -26,8 +27,10 @@ import {
 } from 'lucide-react';
 import { IssueTypeBadge, IssuePriorityBadge, IssueStatusBadge } from './badge-helpers';
 import { ColumnVisibilityMenu } from './column-visibility-menu';
+import { BulkEditBar } from './bulk-edit-bar';
 import { PaginatedIssues } from '@/lib/api';
 import { IssuePriority, IssueType } from '@projectflow/types';
+import { cn } from '@/lib/utils';
 
 type IssueItem = PaginatedIssues['items'][0];
 
@@ -36,6 +39,8 @@ interface IssueTableProps {
   isLoading: boolean;
   onSelectIssue: (issueKey: string) => void;
   onOpenCreateModal: () => void;
+  /** Enables row selection and bulk editing when provided. */
+  projectId?: string;
 }
 
 export function IssueTable({
@@ -43,10 +48,13 @@ export function IssueTable({
   isLoading,
   onSelectIssue,
   onOpenCreateModal,
+  projectId,
 }: IssueTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'issueKey', desc: true },
   ]);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const selectable = Boolean(projectId);
   const [globalFilter, setGlobalFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
@@ -84,6 +92,38 @@ export function IssueTable({
   // Column definitions
   const columns = useMemo<ColumnDef<IssueItem>[]>(
     () => [
+      ...(selectable
+        ? [
+            {
+              id: 'select',
+              enableHiding: false,
+              enableSorting: false,
+              size: 36,
+              header: ({ table }) => (
+                <input
+                  type="checkbox"
+                  aria-label="Select all issues on this page"
+                  checked={table.getIsAllPageRowsSelected()}
+                  ref={(el) => {
+                    if (el) el.indeterminate = table.getIsSomePageRowsSelected();
+                  }}
+                  onChange={table.getToggleAllPageRowsSelectedHandler()}
+                  className="accent-[hsl(var(--primary))] cursor-pointer"
+                />
+              ),
+              cell: ({ row }) => (
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${row.original.issueKey}`}
+                  checked={row.getIsSelected()}
+                  onChange={row.getToggleSelectedHandler()}
+                  onClick={(e) => e.stopPropagation()}
+                  className="accent-[hsl(var(--primary))] cursor-pointer"
+                />
+              ),
+            } satisfies ColumnDef<IssueItem>,
+          ]
+        : []),
       {
         accessorKey: 'issueKey',
         header: ({ column }) => (
@@ -222,7 +262,7 @@ export function IssueTable({
         size: 90,
       },
     ],
-    [],
+    [selectable],
   );
 
   const table = useReactTable({
@@ -232,7 +272,11 @@ export function IssueTable({
       sorting,
       globalFilter,
       columnVisibility,
+      rowSelection,
     },
+    enableRowSelection: selectable,
+    getRowId: (row) => row.id,
+    onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onColumnVisibilityChange: setColumnVisibility,
@@ -246,6 +290,12 @@ export function IssueTable({
       },
     },
   });
+
+  // Selection survives filtering, but only issues still present in the data can be edited
+  const selectedIds = useMemo(
+    () => issues.filter((i) => rowSelection[i.id]).map((i) => i.id),
+    [issues, rowSelection],
+  );
 
   return (
     <div className="space-y-4">
@@ -324,6 +374,10 @@ export function IssueTable({
         </div>
       </div>
 
+      {projectId && selectedIds.length > 0 && (
+        <BulkEditBar projectId={projectId} selectedIds={selectedIds} onClear={() => setRowSelection({})} />
+      )}
+
       {/* Main Table Card */}
       <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -384,7 +438,10 @@ export function IssueTable({
                   <tr
                     key={row.id}
                     onClick={() => onSelectIssue(row.original.issueKey)}
-                    className="hover:bg-muted/40 cursor-pointer transition-colors group"
+                    className={cn(
+                      'hover:bg-muted/40 cursor-pointer transition-colors group',
+                      row.getIsSelected() && 'bg-primary/5',
+                    )}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td key={cell.id} className="px-4 py-3 align-middle">

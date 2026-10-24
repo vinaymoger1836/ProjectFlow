@@ -27,9 +27,43 @@ import {
   SprintPlanIssue,
   SprintPlanWarning,
   CopilotSprintPlanBlock,
+  MilestoneSummary,
+  MilestoneHealth,
+  ReleaseSummary,
+  ReleaseStatus,
+  ReleaseReadinessReport,
+  ReadinessCheck,
+  ReadinessSuggestion,
+  ReleaseShipResult,
+  ReleaseNotesDraft,
+  IssueDependencyLink,
+  IssueLinkKind,
+  BulkIssueOperation,
+  BulkIssueChanges,
+  BulkChangeField,
+  BulkChangePreview,
+  BulkChangeSource,
+  WorkProgress,
 } from '@projectflow/types';
 
 export type {
+  MilestoneSummary,
+  MilestoneHealth,
+  ReleaseSummary,
+  ReleaseStatus,
+  ReleaseReadinessReport,
+  ReadinessCheck,
+  ReadinessSuggestion,
+  ReleaseShipResult,
+  ReleaseNotesDraft,
+  IssueDependencyLink,
+  IssueLinkKind,
+  BulkIssueOperation,
+  BulkIssueChanges,
+  BulkChangeField,
+  BulkChangePreview,
+  BulkChangeSource,
+  WorkProgress,
   SprintSummary,
   SprintStatus,
   SprintVelocity,
@@ -66,6 +100,8 @@ export interface IssueQueryParams {
   priority?: IssuePriority;
   assigneeId?: string;
   sprintId?: string;
+  milestoneId?: string;
+  releaseId?: string;
   search?: string;
   includeArchived?: boolean;
   page?: number;
@@ -133,10 +169,33 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   const json = await res.json();
   if (!res.ok) {
-    throw new Error(json.message || json.error?.message || `HTTP error ${res.status}`);
+    throw new ApiError(
+      json.message || json.error?.message || `HTTP error ${res.status}`,
+      res.status,
+      typeof json.code === 'string' ? json.code : undefined,
+      json,
+    );
   }
 
   return json.data ?? json;
+}
+
+/** HTTP error carrying the status, an optional machine-readable code, and the raw body. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly body?: unknown,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+/** True when a gated release transition was refused because critical readiness checks fail. */
+export function isReadinessGateError(err: unknown): err is ApiError & { body: { readiness: ReleaseReadinessReport } } {
+  return err instanceof ApiError && err.code === 'READINESS_CHECK_FAILED';
 }
 
 export const api = {
@@ -148,6 +207,8 @@ export const api = {
     if (params.priority) searchParams.set('priority', params.priority);
     if (params.assigneeId) searchParams.set('assigneeId', params.assigneeId);
     if (params.sprintId) searchParams.set('sprintId', params.sprintId);
+    if (params.milestoneId) searchParams.set('milestoneId', params.milestoneId);
+    if (params.releaseId) searchParams.set('releaseId', params.releaseId);
     if (params.search) searchParams.set('search', params.search);
     if (params.includeArchived) searchParams.set('includeArchived', 'true');
     if (params.page) searchParams.set('page', String(params.page));
@@ -386,6 +447,129 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
       signal,
+    });
+  },
+
+  // Milestones
+  listMilestones: async (projectId: string): Promise<MilestoneSummary[]> => {
+    return request<MilestoneSummary[]>(`/projects/${projectId}/milestones`);
+  },
+
+  createMilestone: async (
+    projectId: string,
+    payload: { name: string; description?: string; targetDate?: string },
+  ): Promise<MilestoneSummary> => {
+    return request<MilestoneSummary>(`/projects/${projectId}/milestones`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateMilestone: async (
+    milestoneId: string,
+    payload: { name?: string; description?: string | null; targetDate?: string | null },
+  ): Promise<MilestoneSummary> => {
+    return request<MilestoneSummary>(`/milestones/${milestoneId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteMilestone: async (milestoneId: string): Promise<{ success: boolean; message: string }> => {
+    return request(`/milestones/${milestoneId}`, { method: 'DELETE' });
+  },
+
+  // Releases
+  listReleases: async (projectId: string): Promise<ReleaseSummary[]> => {
+    return request<ReleaseSummary[]>(`/projects/${projectId}/releases`);
+  },
+
+  createRelease: async (
+    projectId: string,
+    payload: { version: string; name?: string; description?: string; targetDate?: string },
+  ): Promise<ReleaseSummary> => {
+    return request<ReleaseSummary>(`/projects/${projectId}/releases`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateRelease: async (
+    releaseId: string,
+    payload: {
+      version?: string;
+      name?: string;
+      description?: string | null;
+      targetDate?: string | null;
+      releaseNotes?: string | null;
+    },
+  ): Promise<ReleaseSummary> => {
+    return request<ReleaseSummary>(`/releases/${releaseId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteRelease: async (releaseId: string): Promise<{ success: boolean; message: string }> => {
+    return request(`/releases/${releaseId}`, { method: 'DELETE' });
+  },
+
+  updateReleaseStatus: async (
+    releaseId: string,
+    payload: { status: Exclude<ReleaseStatus, 'RELEASED'>; acknowledgeRisks?: boolean },
+  ): Promise<ReleaseSummary> => {
+    return request<ReleaseSummary>(`/releases/${releaseId}/status`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  shipRelease: async (
+    releaseId: string,
+    payload: { rolloverTo: 'RELEASE' | 'NONE'; rolloverReleaseId?: string; acknowledgeRisks?: boolean },
+  ): Promise<ReleaseShipResult> => {
+    return request<ReleaseShipResult>(`/releases/${releaseId}/ship`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getReleaseReadiness: async (releaseId: string): Promise<ReleaseReadinessReport> => {
+    return request<ReleaseReadinessReport>(`/releases/${releaseId}/readiness`);
+  },
+
+  assessReleaseReadiness: async (releaseId: string): Promise<ReleaseReadinessReport> => {
+    return request<ReleaseReadinessReport>(`/releases/${releaseId}/readiness/assess`, { method: 'POST' });
+  },
+
+  generateReleaseNotes: async (releaseId: string): Promise<ReleaseNotesDraft> => {
+    return request<ReleaseNotesDraft>(`/releases/${releaseId}/notes/generate`, { method: 'POST' });
+  },
+
+  // Issue dependencies
+  listDependencies: async (issueId: string): Promise<IssueDependencyLink[]> => {
+    return request<IssueDependencyLink[]>(`/issues/${issueId}/dependencies`);
+  },
+
+  addDependency: async (issueId: string, payload: { kind: IssueLinkKind; targetIssue: string }): Promise<IssueDependencyLink> => {
+    return request<IssueDependencyLink>(`/issues/${issueId}/dependencies`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  removeDependency: async (dependencyId: string): Promise<{ success: boolean }> => {
+    return request(`/issue-dependencies/${dependencyId}`, { method: 'DELETE' });
+  },
+
+  // Bulk changes (dry run = diff preview)
+  bulkUpdateIssues: async (
+    projectId: string,
+    payload: { operations: BulkIssueOperation[]; dryRun?: boolean; source?: BulkChangeSource },
+  ): Promise<BulkChangePreview> => {
+    return request<BulkChangePreview>(`/projects/${projectId}/issues/bulk-update`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   },
 

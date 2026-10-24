@@ -516,8 +516,10 @@ export interface WorkProgress {
   doneIssueCount: number;
   totalPoints: number;
   donePoints: number;
+  /** Open (not done) issues without a story-point estimate. */
   unestimatedCount: number;
   blockedCount: number;
+  /** Open P0/P1 bugs. */
   openCriticalBugCount: number;
   /** Done issues as a share of all issues (0–100). */
   completionPercentage: number;

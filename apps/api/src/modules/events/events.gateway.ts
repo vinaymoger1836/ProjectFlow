@@ -206,6 +206,15 @@ export class EventsGateway implements OnGatewayInit, OnGatewayDisconnect {
   }
 
   /**
+   * Broadcasts release or milestone changes (create, edit, status transitions, membership).
+   */
+  broadcastPlanningUpdated(projectId: string, entity: 'release' | 'milestone', entityId: string) {
+    if (this.server) {
+      this.server.to(`project:${projectId}`).emit(`${entity}:updated`, { projectId, id: entityId });
+    }
+  }
+
+  /**
    * Broadcasts comment added event.
    */
   broadcastCommentAdded(projectId: string, issueId: string, comment: unknown) {

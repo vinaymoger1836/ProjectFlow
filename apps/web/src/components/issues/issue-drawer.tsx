@@ -24,9 +24,12 @@ import {
   CheckCircle2,
   Paperclip,
   ShieldAlert,
+  Flag,
+  Rocket,
 } from 'lucide-react';
 import { api, IssueCommentItem, ActivityItem } from '@/lib/api';
 import { IssueTypeBadge, IssuePriorityBadge } from './badge-helpers';
+import { IssueDependenciesPanel } from './issue-dependencies-panel';
 import { IssuePriority, IssueType } from '@projectflow/types';
 import { cn } from '@/lib/utils';
 
@@ -113,6 +116,19 @@ export function IssueDrawer({ issueIdentifier, onClose, onSelectIssue }: IssueDr
     enabled: !!issue?.projectId,
   });
 
+  // Milestones and releases this issue can be planned into
+  const { data: milestones = [] } = useQuery({
+    queryKey: ['milestones', issue?.projectId],
+    queryFn: () => (issue?.projectId ? api.listMilestones(issue.projectId) : []),
+    enabled: !!issue?.projectId,
+  });
+
+  const { data: releases = [] } = useQuery({
+    queryKey: ['releases', issue?.projectId],
+    queryFn: () => (issue?.projectId ? api.listReleases(issue.projectId) : []),
+    enabled: !!issue?.projectId,
+  });
+
   // Sync title and description state on load
   useEffect(() => {
     if (issue) {
@@ -141,6 +157,8 @@ export function IssueDrawer({ issueIdentifier, onClose, onSelectIssue }: IssueDr
       queryClient.setQueryData(['issue', updated.id], updated);
       queryClient.invalidateQueries({ queryKey: ['issues'] });
       queryClient.invalidateQueries({ queryKey: ['issue-activity', issue?.id] });
+      queryClient.invalidateQueries({ queryKey: ['releases'] });
+      queryClient.invalidateQueries({ queryKey: ['milestones'] });
     },
   });
 
@@ -599,6 +617,55 @@ export function IssueDrawer({ issueIdentifier, onClose, onSelectIssue }: IssueDr
               </div>
             </div>
 
+            {/* Milestone & Release Planning */}
+            <div className="grid grid-cols-2 gap-3 p-4 rounded-lg bg-muted/40 border border-border/80">
+              <label className="space-y-1">
+                <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  <Flag className="h-3 w-3" />
+                  Milestone
+                </span>
+                <select
+                  value={issue.milestoneId ?? ''}
+                  onChange={(e) => updateMutation.mutate({ milestoneId: e.target.value || null })}
+                  className="w-full text-xs font-medium bg-background border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer truncate"
+                >
+                  <option value="">No milestone</option>
+                  {milestones.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  <Rocket className="h-3 w-3" />
+                  Release
+                </span>
+                <select
+                  value={issue.releaseId ?? ''}
+                  onChange={(e) => updateMutation.mutate({ releaseId: e.target.value || null })}
+                  className="w-full text-xs font-medium bg-background border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer truncate"
+                >
+                  <option value="">No release</option>
+                  {releases
+                    // Shipped versions are history; keep the current one visible so the select stays accurate
+                    .filter((r) => r.status !== 'RELEASED' || r.id === issue.releaseId)
+                    .map((r) => (
+                      <option key={r.id} value={r.id} disabled={r.status === 'RELEASED'}>
+                        {r.version}
+                        {r.status === 'RELEASED' ? ' (shipped)' : ''}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+            {updateMutation.error && (
+              <p className="text-[11px] text-destructive">
+                {updateMutation.error instanceof Error ? updateMutation.error.message : 'Update failed.'}
+              </p>
+            )}
+
             {/* Description Section */}
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -859,6 +926,9 @@ export function IssueDrawer({ issueIdentifier, onClose, onSelectIssue }: IssueDr
                 </div>
               )}
             </div>
+
+            {/* Dependency Graph (blocks / blocked by / relates / duplicates) */}
+            <IssueDependenciesPanel issueId={issue.id} issueKey={issue.issueKey} onSelectIssue={onSelectIssue} />
 
             {/* Details Meta Table */}
             <div className="grid grid-cols-2 gap-4 text-xs py-2 border-y border-border/80">
