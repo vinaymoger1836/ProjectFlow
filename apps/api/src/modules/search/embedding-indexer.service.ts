@@ -1,6 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import {
   Database,
   issues,
@@ -163,6 +163,3 @@ export class EmbeddingIndexerService {
     };
   }
 }
-
-// Keeps the `sql` import tree-shaken out of type-only builds while documenting intent
-void sql;
