@@ -19,7 +19,7 @@ export const projects = pgTable('projects', {
   issueCounter: integer('issue_counter').default(0).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const projectMembers = pgTable('project_members', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -31,7 +31,7 @@ export const projectMembers = pgTable('project_members', {
     .notNull(),
   role: varchar('role', { length: 50 }).default('CONTRIBUTOR').notNull(),
   joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const projectSettings = pgTable('project_settings', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -44,4 +44,4 @@ export const projectSettings = pgTable('project_settings', {
   settingsJson: jsonb('settings_json').default({}).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();

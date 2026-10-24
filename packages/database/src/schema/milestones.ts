@@ -13,7 +13,7 @@ export const milestones = pgTable('milestones', {
   completionPercentage: integer('completion_percentage').default(0).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const milestoneIssues = pgTable('milestone_issues', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -24,4 +24,4 @@ export const milestoneIssues = pgTable('milestone_issues', {
     .references(() => issues.id, { onDelete: 'cascade' })
     .notNull(),
   addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();

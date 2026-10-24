@@ -12,7 +12,7 @@ export const teams = pgTable('teams', {
   description: text('description'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const teamMembers = pgTable('team_members', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -24,4 +24,4 @@ export const teamMembers = pgTable('team_members', {
     .notNull(),
   role: varchar('role', { length: 50 }).default('MEMBER').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();

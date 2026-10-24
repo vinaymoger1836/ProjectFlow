@@ -7,7 +7,7 @@ export const organizations = pgTable('organizations', {
   logoUrl: text('logo_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const roles = pgTable('roles', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -17,7 +17,7 @@ export const roles = pgTable('roles', {
   name: varchar('name', { length: 100 }).notNull(),
   description: text('description'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const permissions = pgTable('permissions', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -27,4 +27,4 @@ export const permissions = pgTable('permissions', {
   action: varchar('action', { length: 100 }).notNull(), // e.g. "projects:create", "issues:delete"
   resource: varchar('resource', { length: 100 }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();

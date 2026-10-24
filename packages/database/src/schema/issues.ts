@@ -44,7 +44,7 @@ export const issues = pgTable('issues', {
   index('issues_project_id_idx').on(table.projectId),
   index('issues_sprint_id_idx').on(table.sprintId),
   index('issues_search_vector_idx').using('gin', table.searchVector),
-]);
+]).enableRLS();
 
 export const issueComments = pgTable('issue_comments', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -63,7 +63,7 @@ export const issueComments = pgTable('issue_comments', {
 }, (table) => [
   index('issue_comments_issue_id_idx').on(table.issueId),
   index('issue_comments_search_vector_idx').using('gin', table.searchVector),
-]);
+]).enableRLS();
 
 export const labels = pgTable('labels', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -74,7 +74,7 @@ export const labels = pgTable('labels', {
   color: varchar('color', { length: 20 }).notNull(),
   description: text('description'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const issueLabels = pgTable('issue_labels', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -84,7 +84,7 @@ export const issueLabels = pgTable('issue_labels', {
   labelId: uuid('label_id')
     .references(() => labels.id, { onDelete: 'cascade' })
     .notNull(),
-});
+}).enableRLS();
 
 export const issueDependencies = pgTable('issue_dependencies', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -96,7 +96,7 @@ export const issueDependencies = pgTable('issue_dependencies', {
     .notNull(),
   relationType: varchar('relation_type', { length: 50 }).notNull(), // BLOCKS, BLOCKED_BY, RELATES_TO, DUPLICATES
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const issueAttachments = pgTable('issue_attachments', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -112,4 +112,4 @@ export const issueAttachments = pgTable('issue_attachments', {
   s3Key: text('s3_key').notNull(),
   s3Url: text('s3_url').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();

@@ -31,4 +31,4 @@ export const sprints = pgTable('sprints', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index('sprints_project_id_status_idx').on(table.projectId, table.status),
-]);
+]).enableRLS();

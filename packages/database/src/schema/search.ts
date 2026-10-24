@@ -30,4 +30,4 @@ export const contentEmbeddings = pgTable('content_embeddings', {
   uniqueIndex('content_embeddings_entity_idx').on(table.entityType, table.entityId),
   index('content_embeddings_project_id_idx').on(table.projectId),
   index('content_embeddings_embedding_hnsw_idx').using('hnsw', table.embedding.op('vector_cosine_ops')),
-]);
+]).enableRLS();

@@ -15,7 +15,7 @@ export const releases = pgTable('releases', {
   releaseNotes: text('release_notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const releaseIssues = pgTable('release_issues', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -26,4 +26,4 @@ export const releaseIssues = pgTable('release_issues', {
     .references(() => issues.id, { onDelete: 'cascade' })
     .notNull(),
   addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();

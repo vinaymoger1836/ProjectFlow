@@ -15,7 +15,7 @@ export const activities = pgTable('activities', {
   action: varchar('action', { length: 100 }).notNull(), // CREATED, UPDATED, DELETED, STATUS_CHANGED, ASSIGNED
   details: jsonb('details').default({}).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -29,7 +29,7 @@ export const auditLogs = pgTable('audit_logs', {
   resource: varchar('resource', { length: 100 }).notNull(),
   payload: jsonb('payload').default({}).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const aiAuditTrail = pgTable('ai_audit_trail', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -45,4 +45,4 @@ export const aiAuditTrail = pgTable('ai_audit_trail', {
   completionTokens: integer('completion_tokens'),
   latencyMs: integer('latency_ms'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
