@@ -24,6 +24,8 @@ import { IssueDrawer } from '@/components/issues/issue-drawer';
 import { CreateIssueModal } from '@/components/issues/create-issue-modal';
 import { AiCopilotSideDrawer } from '@/components/ai/ai-copilot-side-drawer';
 import { SearchModal, useSearchShortcut } from '@/components/search/search-modal';
+import { BacklogView } from '@/components/sprints/backlog-view';
+import { ActiveSprintCard } from '@/components/sprints/active-sprint-card';
 import { cn } from '@/lib/utils';
 
 type NavTab = 'overview' | 'issues' | 'board' | 'sprints';
@@ -34,6 +36,7 @@ function HomePageContent() {
   const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [defaultCreateStatus, setDefaultCreateStatus] = useState<string>('TODO');
+  const [createSprintId, setCreateSprintId] = useState<string | undefined>(undefined);
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const projectId = '11111111-1111-1111-1111-111111111111';
@@ -66,8 +69,9 @@ function HomePageContent() {
     }
   };
 
-  const handleOpenCreateModal = (status = 'TODO') => {
+  const handleOpenCreateModal = (status = 'TODO', sprintId?: string) => {
     setDefaultCreateStatus(status);
+    setCreateSprintId(sprintId);
     setIsCreateModalOpen(true);
   };
 
@@ -156,7 +160,7 @@ function HomePageContent() {
               )}
             >
               <Calendar className={cn('h-4 w-4', activeTab === 'sprints' ? 'text-primary' : '')} />
-              <span>Sprints & Releases</span>
+              <span>Backlog & Sprints</span>
             </button>
 
             <div className="pt-4 text-xs font-semibold text-muted-foreground px-3 py-2 uppercase tracking-wider">
@@ -325,14 +329,7 @@ function HomePageContent() {
             <div className="space-y-6">
               {/* Quick Metrics Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-5 rounded-lg border border-border bg-card shadow-sm space-y-2">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Active Sprint 42</span>
-                    <Clock className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="text-2xl font-bold">18 / 26 Pts</div>
-                  <p className="text-xs text-muted-foreground">4 days remaining • 69% completed</p>
-                </div>
+                <ActiveSprintCard projectId={projectId} onOpen={() => setActiveTab('board')} />
 
                 <div className="p-5 rounded-lg border border-border bg-card shadow-sm space-y-2">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -410,25 +407,21 @@ function HomePageContent() {
               <KanbanBoard
                 projectId={projectId}
                 onSelectIssue={handleSelectIssue}
-                onOpenCreateModal={(status) => handleOpenCreateModal(status)}
+                onOpenCreateModal={(status, sprintId) => handleOpenCreateModal(status, sprintId)}
+                onOpenBacklog={() => setActiveTab('sprints')}
               />
             </div>
           )}
 
           {activeTab === 'sprints' && (
-            <div className="p-12 text-center rounded-lg border border-dashed border-border bg-card/40 space-y-3">
-              <Calendar className="h-8 w-8 text-muted-foreground mx-auto" />
-              <h3 className="font-semibold text-base">Agile Sprints & Releases (Phases 5 & 6)</h3>
-              <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                Sprint planning, capacity forecasting, and automated release readiness are scheduled for Phases 5 and 6.
-              </p>
-              <button
-                type="button"
-                onClick={() => setActiveTab('issues')}
-                className="px-3.5 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground"
-              >
-                View Current Issues
-              </button>
+            <div className="space-y-4">
+              <div className="border-b border-border pb-2">
+                <h3 className="text-lg font-bold">Backlog & Sprints</h3>
+                <p className="text-xs text-muted-foreground">
+                  Groom the backlog, drag issues into sprints, and track capacity. Let AI propose a sprint sized to your velocity.
+                </p>
+              </div>
+              <BacklogView projectId={projectId} onSelectIssue={handleSelectIssue} />
             </div>
           )}
         </div>
@@ -473,6 +466,7 @@ function HomePageContent() {
       projectKey="PAY"
       isOpen={isCreateModalOpen}
       defaultStatus={defaultCreateStatus}
+      sprintId={createSprintId}
       onClose={() => setIsCreateModalOpen(false)}
       onCreated={(key) => handleSelectIssue(key)}
     />
