@@ -314,3 +314,50 @@ export interface CopilotChatResponse {
 }
 
 
+
+// ==========================================
+// Search & Duplicate Detection (Phase 4)
+// ==========================================
+
+/** Which retriever surfaced a result: exact key lookup, full-text, or vector similarity. */
+export type SearchMatchSource = 'KEY' | 'KEYWORD' | 'SEMANTIC';
+
+export interface IssueSearchResult {
+  id: string;
+  issueKey: string;
+  title: string;
+  type: IssueType;
+  status: string;
+  priority: IssuePriority;
+  assignee: { id: string; name: string; avatarUrl?: string | null } | null;
+  /** Reciprocal Rank Fusion score; only meaningful relative to other results in the same response. */
+  score: number;
+  matchSources: SearchMatchSource[];
+  /** Best cosine similarity (0–1) when matched semantically, otherwise null. */
+  similarity: number | null;
+  /** Present when the strongest evidence for this issue came from one of its comments. */
+  matchedComment: { id: string; snippet: string } | null;
+}
+
+export interface IssueSearchResponse {
+  query: string;
+  results: IssueSearchResult[];
+  /** False when semantic retrieval was skipped or unavailable (keyword results only). */
+  semanticEnabled: boolean;
+}
+
+export interface SimilarIssue {
+  id: string;
+  issueKey: string;
+  title: string;
+  type: IssueType;
+  status: string;
+  priority: IssuePriority;
+  /** Cosine similarity (0–1). */
+  similarity: number;
+}
+
+export interface SimilarIssuesResponse {
+  matches: SimilarIssue[];
+  semanticEnabled: boolean;
+}

@@ -32,7 +32,14 @@ const reporterUser = aliasedTable(users, 'reporter_user');
 const activityUser = aliasedTable(users, 'activity_user');
 const attachmentUploader = aliasedTable(users, 'attachment_uploader');
 import { Optional } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EventsGateway } from '../events/events.gateway';
+import {
+  DomainEvents,
+  IssueCreatedEvent,
+  IssueUpdatedEvent,
+  CommentCreatedEvent,
+} from '../../common/events/domain-events';
 
 const commentAuthor = aliasedTable(users, 'comment_author');
 
@@ -41,6 +48,7 @@ const commentAuthor = aliasedTable(users, 'comment_author');
 export class IssuesService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
+    private readonly eventEmitter: EventEmitter2,
     @Optional() private readonly eventsGateway?: EventsGateway,
   ) {}
 
@@ -122,6 +130,10 @@ export class IssuesService {
     });
 
     this.eventsGateway?.broadcastIssueCreated(projectId, result);
+    this.eventEmitter.emit(DomainEvents.IssueCreated, {
+      issueId: result.id,
+      projectId,
+    } satisfies IssueCreatedEvent);
     return result;
   }
 
@@ -436,6 +448,11 @@ export class IssuesService {
     });
 
     this.eventsGateway?.broadcastIssueUpdated(existing.projectId, result);
+    this.eventEmitter.emit(DomainEvents.IssueUpdated, {
+      issueId: existing.id,
+      projectId: existing.projectId,
+      updatedFields: Object.keys(dto),
+    } satisfies IssueUpdatedEvent);
     return result;
   }
 
@@ -535,6 +552,11 @@ export class IssuesService {
     };
 
     this.eventsGateway?.broadcastCommentAdded(issue.projectId, issue.id, commentResult);
+    this.eventEmitter.emit(DomainEvents.CommentCreated, {
+      commentId: comment.id,
+      issueId: issue.id,
+      projectId: issue.projectId,
+    } satisfies CommentCreatedEvent);
     return commentResult;
   }
 
