@@ -24,6 +24,7 @@ serviceAccountKey*.json
 # Project Plans & Agent Rules (Untracked per user instructions)
 GEMINI.md
 AGENTS.md
+CLAUDE.md
 Architecture_Plan.md
 PROJECT_PLAN.md
 
