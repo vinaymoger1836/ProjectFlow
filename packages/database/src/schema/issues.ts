@@ -1,6 +1,8 @@
-import { pgTable, uuid, varchar, text, integer, timestamp, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, integer, timestamp, boolean, index } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { projects } from './projects';
 import { users } from './users';
+import { tsvector } from './custom-types';
 
 export const issues = pgTable('issues', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -31,7 +33,14 @@ export const issues = pgTable('issues', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
   closedAt: timestamp('closed_at', { withTimezone: true }),
-});
+  // Weighted full-text document: title (A) ranks above description (B)
+  searchVector: tsvector('search_vector').generatedAlwaysAs(
+    sql`setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')`,
+  ),
+}, (table) => [
+  index('issues_project_id_idx').on(table.projectId),
+  index('issues_search_vector_idx').using('gin', table.searchVector),
+]);
 
 export const issueComments = pgTable('issue_comments', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -44,7 +53,13 @@ export const issueComments = pgTable('issue_comments', {
   content: text('content').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+  searchVector: tsvector('search_vector').generatedAlwaysAs(
+    sql`to_tsvector('english', coalesce(content, ''))`,
+  ),
+}, (table) => [
+  index('issue_comments_issue_id_idx').on(table.issueId),
+  index('issue_comments_search_vector_idx').using('gin', table.searchVector),
+]);
 
 export const labels = pgTable('labels', {
   id: uuid('id').defaultRandom().primaryKey(),
