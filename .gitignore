@@ -62,3 +62,8 @@ ENV/
 # Database & Local volumes
 .postgres-data
 .redis-data
+
+# Stray compiled output inside package sources (shadows .ts files for drizzle-kit)
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts
