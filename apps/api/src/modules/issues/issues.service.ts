@@ -305,10 +305,11 @@ export class IssuesService {
 
       return {
         ...rest,
+        // Left-joined user columns are typed nullable; users.name is NOT NULL whenever the join matches
         assignee: assigneeId
           ? {
               id: assigneeId,
-              name: assigneeName,
+              name: assigneeName ?? 'Unknown',
               email: assigneeEmail,
               avatarUrl: assigneeAvatarUrl,
             }

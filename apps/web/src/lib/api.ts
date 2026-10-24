@@ -15,9 +15,17 @@ import {
   CopilotChartBlock,
   CopilotTableBlock,
   CopilotProfileCardBlock,
+  IssueSearchResponse,
+  IssueSearchResult,
+  SimilarIssue,
+  SimilarIssuesResponse,
 } from '@projectflow/types';
 
 export type {
+  IssueSearchResponse,
+  IssueSearchResult,
+  SimilarIssue,
+  SimilarIssuesResponse,
   CopilotChatResponse,
   CopilotWidget,
   CopilotIssueListWidget,
@@ -240,6 +248,31 @@ export const api = {
   }> => {
     return request(`/ai/issues/${issueId}/suggest-triage`, {
       method: 'POST',
+    });
+  },
+
+  // Search & Duplicate Detection
+  searchIssues: async (
+    projectId: string,
+    q: string,
+    options: { limit?: number; signal?: AbortSignal } = {},
+  ): Promise<IssueSearchResponse> => {
+    const searchParams = new URLSearchParams({ q });
+    if (options.limit) searchParams.set('limit', String(options.limit));
+    return request<IssueSearchResponse>(`/projects/${projectId}/search?${searchParams.toString()}`, {
+      signal: options.signal,
+    });
+  },
+
+  findSimilarIssues: async (
+    projectId: string,
+    payload: { title: string; description?: string; excludeIssueId?: string; limit?: number },
+    signal?: AbortSignal,
+  ): Promise<SimilarIssuesResponse> => {
+    return request<SimilarIssuesResponse>(`/projects/${projectId}/search/similar`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      signal,
     });
   },
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
@@ -23,6 +23,7 @@ import { KanbanBoard } from '@/components/kanban/kanban-board';
 import { IssueDrawer } from '@/components/issues/issue-drawer';
 import { CreateIssueModal } from '@/components/issues/create-issue-modal';
 import { AiCopilotSideDrawer } from '@/components/ai/ai-copilot-side-drawer';
+import { SearchModal, useSearchShortcut } from '@/components/search/search-modal';
 import { cn } from '@/lib/utils';
 
 type NavTab = 'overview' | 'issues' | 'board' | 'sprints';
@@ -34,7 +35,10 @@ function HomePageContent() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [defaultCreateStatus, setDefaultCreateStatus] = useState<string>('TODO');
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const projectId = '11111111-1111-1111-1111-111111111111';
+
+  useSearchShortcut(useCallback(() => setIsSearchOpen(true), []));
 
   // Sync drawer with URL ?issue=KEY
   useEffect(() => {
@@ -217,19 +221,19 @@ function HomePageContent() {
         >
           {/* Top Navbar */}
           <header className="h-16 border-b border-border px-6 flex items-center justify-between bg-card/60 backdrop-blur-md shrink-0">
-            {/* AI Command Bar Search Trigger */}
+            {/* Issue Search Trigger */}
             <div className="flex items-center gap-2 w-96">
               <button
                 type="button"
-                onClick={() => setIsCopilotOpen(true)}
+                onClick={() => setIsSearchOpen(true)}
                 className="w-full flex items-center justify-between px-3 py-1.5 text-xs bg-muted/40 border border-input rounded-md text-muted-foreground hover:border-primary transition-colors shadow-xs"
               >
                 <span className="flex items-center gap-2">
                   <Search className="h-3.5 w-3.5" />
-                  <span>Ask AI Copilot or search issues (Cmd+K)...</span>
+                  <span>Search issues and comments...</span>
                 </span>
                 <kbd className="text-[10px] bg-background px-1.5 py-0.5 rounded border border-border font-mono">
-                  ⌘K
+                  /
                 </kbd>
               </button>
             </div>
@@ -451,6 +455,14 @@ function HomePageContent() {
     <IssueDrawer
       issueIdentifier={selectedIssueKey}
       onClose={handleCloseDrawer}
+      onSelectIssue={handleSelectIssue}
+    />
+
+    {/* Hybrid Issue Search ("/" shortcut) */}
+    <SearchModal
+      projectId={projectId}
+      isOpen={isSearchOpen}
+      onOpenChange={setIsSearchOpen}
       onSelectIssue={handleSelectIssue}
     />
 

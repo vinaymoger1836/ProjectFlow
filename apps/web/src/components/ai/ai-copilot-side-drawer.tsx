@@ -247,6 +247,7 @@ export function AiCopilotSideDrawer({
                       onOpenIssueInDrawer(key);
                     }
                   }}
+                  onOpenIssue={onOpenIssueInDrawer}
                 />
               )}
             </div>

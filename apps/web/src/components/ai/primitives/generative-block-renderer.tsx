@@ -48,6 +48,7 @@ export function GenerativeBlockRenderer({
           projectId={projectId}
           initialDraft={block.draft}
           onIssueCreated={onOpenIssueInDrawer}
+          onOpenIssue={onOpenIssueInDrawer}
         />
       );
 

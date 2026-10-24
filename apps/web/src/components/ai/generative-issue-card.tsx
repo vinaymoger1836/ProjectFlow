@@ -15,11 +15,14 @@ import {
 import { api, ParsedIssueDraft } from '@/lib/api';
 import { IssueTypeBadge, IssuePriorityBadge } from '../issues/badge-helpers';
 import { IssuePriority, IssueType } from '@projectflow/types';
+import { DuplicateIssueWarning } from './duplicate-issue-warning';
 
 interface GenerativeIssueCardProps {
   projectId: string;
   initialDraft: ParsedIssueDraft;
   onIssueCreated?: (issueKey: string) => void;
+  /** Opens an existing issue, e.g. a flagged possible duplicate. */
+  onOpenIssue?: (issueKey: string) => void;
   onDiscard?: () => void;
 }
 
@@ -27,6 +30,7 @@ export function GenerativeIssueCard({
   projectId,
   initialDraft,
   onIssueCreated,
+  onOpenIssue,
   onDiscard,
 }: GenerativeIssueCardProps) {
   const queryClient = useQueryClient();
@@ -111,6 +115,14 @@ export function GenerativeIssueCard({
           💡 {draft.explanation}
         </p>
       )}
+
+      {/* Background duplicate check against existing project issues */}
+      <DuplicateIssueWarning
+        projectId={projectId}
+        title={draft.title}
+        description={draft.description}
+        onOpenIssue={onOpenIssue}
+      />
 
       {/* Form / Preview Content */}
       {isEditing ? (
