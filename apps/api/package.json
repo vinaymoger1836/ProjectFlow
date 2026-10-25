@@ -33,12 +33,14 @@
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.39.3",
     "ioredis": "^6.0.0",
+    "nodemailer": "^10.2.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.13.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.5",
@@ -46,7 +48,9 @@
     "@nestjs/testing": "^11.0.11",
     "@types/express": "^5.0.0",
     "@types/node": "^22.13.9",
+    "@types/nodemailer": "^8.0.2",
     "@types/passport-jwt": "^4.0.1",
+    "@types/web-push": "^3.6.4",
     "source-map-support": "^0.5.21",
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
