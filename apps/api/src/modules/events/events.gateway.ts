@@ -3,6 +3,7 @@ import {
   WebSocketServer,
   SubscribeMessage,
   OnGatewayInit,
+  OnGatewayConnection,
   OnGatewayDisconnect,
   ConnectedSocket,
   MessageBody,
@@ -42,7 +43,7 @@ type RoomAck = { status: 'joined' | 'left'; room: string } | { status: 'error'; 
     credentials: true,
   },
 })
-export class EventsGateway implements OnGatewayInit, OnGatewayDisconnect {
+export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(EventsGateway.name);
 
   @WebSocketServer()
@@ -80,6 +81,12 @@ export class EventsGateway implements OnGatewayInit, OnGatewayDisconnect {
         next(new Error('Unauthorized'));
       }
     });
+  }
+
+  /** Every authenticated socket joins its user's private room for per-user events (notifications). */
+  async handleConnection(client: AuthedSocket) {
+    const userId = client.data.user?.id;
+    if (userId) await client.join(userRoom(userId));
   }
 
   handleDisconnect(client: AuthedSocket) {
@@ -215,6 +222,24 @@ export class EventsGateway implements OnGatewayInit, OnGatewayDisconnect {
   }
 
   /**
+   * Broadcasts a recomputed project health status to everyone viewing the project.
+   */
+  broadcastProjectHealth(projectId: string, payload: { status: string; score: number }) {
+    if (this.server) {
+      this.server.to(`project:${projectId}`).emit('project:health', { projectId, ...payload });
+    }
+  }
+
+  /**
+   * Sends an event to every socket of one user (all tabs and devices).
+   */
+  emitToUser(userId: string, event: string, payload: unknown) {
+    if (this.server) {
+      this.server.to(userRoom(userId)).emit(event, payload);
+    }
+  }
+
+  /**
    * Broadcasts comment added event.
    */
   broadcastCommentAdded(projectId: string, issueId: string, comment: unknown) {
@@ -222,4 +247,8 @@ export class EventsGateway implements OnGatewayInit, OnGatewayDisconnect {
       this.server.to(`project:${projectId}`).emit('comment:added', { issueId, comment });
     }
   }
+}
+
+function userRoom(userId: string): string {
+  return `user:${userId}`;
 }

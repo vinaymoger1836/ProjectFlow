@@ -102,6 +102,12 @@ export class MilestonesService {
     return { success: true, message: `${milestone.name} deleted; its issues are no longer tied to a milestone.` };
   }
 
+  /** Summaries for every milestone of a project, without an access check (internal callers only). */
+  async summarizeProject(projectId: string): Promise<MilestoneSummary[]> {
+    const rows = await this.db.select().from(milestones).where(eq(milestones.projectId, projectId));
+    return this.summarize(projectId, rows);
+  }
+
   /** Summaries for specific milestones of a project; used by release readiness. */
   async summarizeByIds(projectId: string, milestoneIds: string[]): Promise<MilestoneSummary[]> {
     if (milestoneIds.length === 0) return [];
