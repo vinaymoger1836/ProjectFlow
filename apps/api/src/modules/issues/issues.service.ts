@@ -39,6 +39,7 @@ import {
   DomainEvents,
   IssueCreatedEvent,
   IssueUpdatedEvent,
+  IssueAssignedEvent,
   CommentCreatedEvent,
 } from '../../common/events/domain-events';
 
@@ -137,6 +138,14 @@ export class IssuesService {
       issueId: result.id,
       projectId,
     } satisfies IssueCreatedEvent);
+    if (dto.assigneeId) {
+      this.eventEmitter.emit(DomainEvents.IssueAssigned, {
+        issueId: result.id,
+        projectId,
+        assigneeId: dto.assigneeId,
+        actorId: userId,
+      } satisfies IssueAssignedEvent);
+    }
     return result;
   }
 
@@ -466,6 +475,14 @@ export class IssuesService {
       projectId: existing.projectId,
       updatedFields: Object.keys(dto),
     } satisfies IssueUpdatedEvent);
+    if (dto.assigneeId && dto.assigneeId !== existing.assigneeId) {
+      this.eventEmitter.emit(DomainEvents.IssueAssigned, {
+        issueId: existing.id,
+        projectId: existing.projectId,
+        assigneeId: dto.assigneeId,
+        actorId: userId,
+      } satisfies IssueAssignedEvent);
+    }
     return result;
   }
 

@@ -9,6 +9,8 @@ import {
 import { and, eq, or, sql, inArray } from 'drizzle-orm';
 import { Database, issues, issueDependencies, activities } from '@projectflow/database';
 import { IssueDependencyLink, IssueLinkKind, IssueLinkedIssue, IssueRelationType } from '@projectflow/types';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { DomainEvents, PlanningChangedEvent } from '../../common/events/domain-events';
 import { DRIZZLE_DB } from '../database/database.module';
 import { ProjectAccessService, ProjectRecord } from '../auth/project-access.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -45,6 +47,7 @@ export class IssueDependenciesService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly projectAccess: ProjectAccessService,
+    private readonly eventEmitter: EventEmitter2,
     @Optional() private readonly eventsGateway?: EventsGateway,
   ) {}
 
@@ -199,6 +202,9 @@ export class IssueDependenciesService {
   private broadcast(...affected: IssueRef[]) {
     for (const issue of affected) {
       this.eventsGateway?.broadcastIssueUpdated(issue.projectId, { id: issue.id, issueKey: issue.issueKey });
+    }
+    if (affected[0]) {
+      this.eventEmitter.emit(DomainEvents.PlanningChanged, { projectId: affected[0].projectId, source: 'DEPENDENCY' } satisfies PlanningChangedEvent);
     }
   }
 }

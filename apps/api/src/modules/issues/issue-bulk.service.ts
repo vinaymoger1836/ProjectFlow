@@ -6,7 +6,7 @@ import { BulkChangeField, BulkChangePreview, BulkFieldDiff, BulkIssueDiff, BulkI
 import { DRIZZLE_DB } from '../database/database.module';
 import { ProjectAccessService } from '../auth/project-access.service';
 import { EventsGateway } from '../events/events.gateway';
-import { DomainEvents, IssueUpdatedEvent } from '../../common/events/domain-events';
+import { DomainEvents, IssueAssignedEvent, IssueUpdatedEvent } from '../../common/events/domain-events';
 import { AssignmentTargetsService } from './assignment-targets.service';
 import { BulkUpdateIssuesDto } from './dto/bulk-update-issues.dto';
 
@@ -152,6 +152,15 @@ export class IssueBulkService {
         projectId,
         updatedFields: item.diffs.map((d) => d.field),
       } satisfies IssueUpdatedEvent);
+      const assigned = item.diffs.find((d) => d.field === 'assigneeId' && d.to !== null);
+      if (assigned?.to) {
+        this.eventEmitter.emit(DomainEvents.IssueAssigned, {
+          issueId: item.issueId,
+          projectId,
+          assigneeId: assigned.to,
+          actorId: userId,
+        } satisfies IssueAssignedEvent);
+      }
     }
 
     return { items, unchangedIssueKeys, applied: true };

@@ -15,6 +15,8 @@ import {
   SprintVelocity,
   SprintCompletionResult,
 } from '@projectflow/types';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { DomainEvents, PlanningChangedEvent } from '../../common/events/domain-events';
 import { DRIZZLE_DB } from '../database/database.module';
 import { ProjectAccessService, ProjectRecord } from '../auth/project-access.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -55,6 +57,7 @@ export class SprintsService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly projectAccess: ProjectAccessService,
+    private readonly eventEmitter: EventEmitter2,
     @Optional() private readonly eventsGateway?: EventsGateway,
   ) {}
 
@@ -462,6 +465,7 @@ export class SprintsService {
 
   broadcast(projectId: string, sprintId: string): void {
     this.eventsGateway?.broadcastSprintUpdated(projectId, sprintId);
+    this.eventEmitter.emit(DomainEvents.PlanningChanged, { projectId, source: 'SPRINT' } satisfies PlanningChangedEvent);
   }
 
   private async loadSprintWithAccess(userId: string, sprintId: string) {

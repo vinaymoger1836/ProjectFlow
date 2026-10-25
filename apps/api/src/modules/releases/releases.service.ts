@@ -8,6 +8,8 @@ import {
 import { and, eq, inArray, isNotNull, ne, notInArray, sql } from 'drizzle-orm';
 import { Database, releases, issues, activities } from '@projectflow/database';
 import { ReleaseReadinessReport, ReleaseShipResult, ReleaseStatus, ReleaseSummary, WorkProgress } from '@projectflow/types';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { DomainEvents, PlanningChangedEvent } from '../../common/events/domain-events';
 import { DRIZZLE_DB } from '../database/database.module';
 import { ProjectAccessService, ProjectRecord } from '../auth/project-access.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -29,6 +31,7 @@ export class ReleasesService {
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly projectAccess: ProjectAccessService,
     private readonly readiness: ReleaseReadinessService,
+    private readonly eventEmitter: EventEmitter2,
     @Optional() private readonly eventsGateway?: EventsGateway,
   ) {}
 
@@ -319,6 +322,7 @@ export class ReleasesService {
 
   private broadcast(projectId: string, releaseId: string) {
     this.eventsGateway?.broadcastPlanningUpdated(projectId, 'release', releaseId);
+    this.eventEmitter.emit(DomainEvents.PlanningChanged, { projectId, source: 'RELEASE' } satisfies PlanningChangedEvent);
   }
 }
 

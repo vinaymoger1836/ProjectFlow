@@ -2,6 +2,8 @@ import { Injectable, Inject, NotFoundException, Optional } from '@nestjs/common'
 import { and, eq, inArray } from 'drizzle-orm';
 import { Database, milestones, activities } from '@projectflow/database';
 import { MilestoneSummary, SprintVelocity, WorkProgress } from '@projectflow/types';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { DomainEvents, PlanningChangedEvent } from '../../common/events/domain-events';
 import { DRIZZLE_DB } from '../database/database.module';
 import { ProjectAccessService, ProjectRecord } from '../auth/project-access.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -27,6 +29,7 @@ export class MilestonesService {
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly projectAccess: ProjectAccessService,
     private readonly sprintsService: SprintsService,
+    private readonly eventEmitter: EventEmitter2,
     @Optional() private readonly eventsGateway?: EventsGateway,
   ) {}
 
@@ -148,6 +151,7 @@ export class MilestonesService {
 
   private broadcast(projectId: string, milestoneId: string) {
     this.eventsGateway?.broadcastPlanningUpdated(projectId, 'milestone', milestoneId);
+    this.eventEmitter.emit(DomainEvents.PlanningChanged, { projectId, source: 'MILESTONE' } satisfies PlanningChangedEvent);
   }
 }
 
