@@ -8,3 +8,5 @@ export * from './milestones';
 export * from './releases';
 export * from './activities';
 export * from './search';
+export * from './health';
+export * from './notifications';

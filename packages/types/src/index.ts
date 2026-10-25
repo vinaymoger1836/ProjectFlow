@@ -314,6 +314,8 @@ export type GenerativeBlock =
   | CopilotProfileCardBlock
   | CopilotProposalBlock
   | CopilotSprintPlanBlock
+  | CopilotProjectHealthBlock
+  | CopilotRiskReportBlock
   | CopilotIssueListWidget
   | CopilotMetricsWidget;
 
@@ -675,4 +677,137 @@ export interface ReleaseNotesDraft {
   sections: ReleaseNotesSection[];
   modelUsed: string;
   generatedAt: string;
+}
+
+// ==========================================
+// Project Health, Notifications & Command Bar (Phase 7)
+// ==========================================
+
+export type HealthFactorId =
+  | 'CRITICAL_BUGS'
+  | 'AGING_BUGS'
+  | 'BLOCKED_WORK'
+  | 'OVERDUE_ISSUES'
+  | 'MILESTONE_SLIP'
+  | 'RELEASE_RISK'
+  | 'SPRINT_BEHIND'
+  | 'CYCLE_TIME';
+
+export type HealthFactorSeverity = 'info' | 'warning' | 'critical';
+
+/** One deterministic rule that lowered the health score. */
+export interface HealthFactor {
+  id: HealthFactorId;
+  label: string;
+  severity: HealthFactorSeverity;
+  /** Points subtracted from 100. */
+  penalty: number;
+  detail: string;
+  issueKeys: string[];
+}
+
+export interface ProjectHealthMetrics {
+  openIssueCount: number;
+  openCriticalBugCount: number;
+  agingBugCount: number;
+  blockedCount: number;
+  overdueIssueCount: number;
+  atRiskMilestoneCount: number;
+  overdueMilestoneCount: number;
+  releasesAtRiskCount: number;
+  activeSprintCount: number;
+  sprintsBehindCount: number;
+  resolvedLast30Days: number;
+  /** Median days from creation to resolution over the last 30 days, or null with fewer than 3 samples. */
+  medianCycleTimeDays: number | null;
+}
+
+export interface ProjectHealthTrendPoint {
+  date: string;
+  score: number;
+  status: ProjectHealthStatus;
+}
+
+export interface ProjectHealthReport {
+  projectId: string;
+  projectKey: string;
+  projectName: string;
+  status: ProjectHealthStatus;
+  score: number;
+  factors: HealthFactor[];
+  metrics: ProjectHealthMetrics;
+  evaluatedAt: string;
+  /** Daily snapshots, oldest first (up to 30 days). */
+  trend: ProjectHealthTrendPoint[];
+}
+
+export type NotificationType = 'ISSUE_ASSIGNED';
+
+export interface NotificationItem {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  link: string | null;
+  projectId: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  actor: { id: string; name: string; avatarUrl?: string | null } | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface NotificationPage {
+  items: NotificationItem[];
+  unreadCount: number;
+  /** Pass back as `before` to load older notifications; null when there are none. */
+  nextCursor: string | null;
+}
+
+export interface NotificationPreference {
+  type: NotificationType;
+  label: string;
+  description: string;
+  inApp: boolean;
+  email: boolean;
+  push: boolean;
+}
+
+export interface NotificationSettings {
+  preferences: NotificationPreference[];
+  /** Whether the server has each delivery channel configured. */
+  channels: { email: boolean; push: boolean };
+  pushPublicKey: string | null;
+  pushSubscriptionCount: number;
+}
+
+export interface CopilotProjectHealthBlock {
+  type: 'project_health';
+  report: ProjectHealthReport;
+}
+
+export interface RiskReportItem {
+  severity: HealthFactorSeverity;
+  projectKey: string;
+  label: string;
+  detail: string;
+  issueKeys: string[];
+}
+
+export interface CopilotRiskReportBlock {
+  type: 'risk_report';
+  title: string;
+  projects: { projectId: string; projectKey: string; projectName: string; status: ProjectHealthStatus; score: number }[];
+  risks: RiskReportItem[];
+}
+
+export type CommandBarIntent = 'health' | 'risk' | 'issue_query' | 'copilot';
+
+export interface CommandBarResponse {
+  intent: CommandBarIntent;
+  reply: string;
+  blocks: GenerativeBlock[];
+  /** Project keys the answer covers. */
+  scope: string[];
+  modelUsed: string;
 }

@@ -1,4 +1,5 @@
 import { pgTable, uuid, varchar, text, jsonb, timestamp, integer } from 'drizzle-orm/pg-core';
+import type { ProjectHealthStatus } from '@projectflow/types';
 import { organizations } from './organizations';
 import { teams } from './teams';
 import { users } from './users';
@@ -15,7 +16,10 @@ export const projects = pgTable('projects', {
   leadId: uuid('lead_id')
     .references(() => users.id, { onDelete: 'restrict' })
     .notNull(),
-  healthStatus: varchar('health_status', { length: 50 }).default('HEALTHY').notNull(),
+  // Maintained by the Project Health Engine (Phase 7); see project_health_snapshots for history
+  healthStatus: varchar('health_status', { length: 50 }).$type<ProjectHealthStatus>().default('HEALTHY').notNull(),
+  healthScore: integer('health_score'),
+  healthEvaluatedAt: timestamp('health_evaluated_at', { withTimezone: true }),
   issueCounter: integer('issue_counter').default(0).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
