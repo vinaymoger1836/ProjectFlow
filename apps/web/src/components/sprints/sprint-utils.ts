@@ -23,11 +23,15 @@ export function toDateInputValue(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** <input type="date"> value (local midnight) → ISO timestamp, or undefined when empty. */
+/**
+ * <input type="date"> value → ISO timestamp at 12:00 UTC, or undefined when empty.
+ * Midday UTC keeps the same calendar day for every timezone between UTC−11 and UTC+11, so the
+ * server (which formats in UTC) and every browser agree on the date that was picked.
+ */
 export function fromDateInputValue(value: string): string | undefined {
   if (!value) return undefined;
   const [y, m, d] = value.split('-').map(Number);
-  return new Date(y, m - 1, d).toISOString();
+  return new Date(Date.UTC(y, m - 1, d, 12)).toISOString();
 }
 
 export function addDaysToInputValue(value: string, days: number): string {

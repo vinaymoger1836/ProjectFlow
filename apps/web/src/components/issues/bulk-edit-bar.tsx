@@ -101,7 +101,12 @@ export function BulkEditBar({ projectId, selectedIds, onClear }: BulkEditBarProp
   const fieldLabel = FIELD_OPTIONS.find((f) => f.value === field)?.label.toLowerCase();
 
   return (
-    <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 animate-fade-in">
+    // Floats over the page so selecting rows never shifts the table under the cursor
+    <div
+      role="toolbar"
+      aria-label="Bulk edit selected issues"
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[min(860px,calc(100vw-2rem))] flex flex-wrap items-center gap-2.5 rounded-xl border border-primary/40 bg-card/95 backdrop-blur-md px-4 py-2.5 shadow-2xl animate-fade-in"
+    >
       <span className="text-xs font-semibold text-primary">
         {selectedIds.length} selected
       </span>

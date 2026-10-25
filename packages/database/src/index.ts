@@ -38,7 +38,10 @@ export function getDbPool(connectionString?: string) {
     pool = new Pool({
       connectionString: connStr,
       max: 10,
-      idleTimeoutMillis: 10000,
+      // Opening a TLS + SCRAM connection to a remote pooler costs several round trips (seconds on
+      // high-latency links), so keep a warm floor and only reap idle clients after five minutes.
+      min: isRemote ? 2 : 0,
+      idleTimeoutMillis: 300_000,
       connectionTimeoutMillis: 10000,
       keepAlive: true,
       keepAliveInitialDelayMillis: 10000,

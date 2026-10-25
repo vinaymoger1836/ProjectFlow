@@ -129,6 +129,17 @@ export function IssueDrawer({ issueIdentifier, onClose, onSelectIssue }: IssueDr
     enabled: !!issue?.projectId,
   });
 
+  // The drawer stays mounted across issues: drop per-issue AI results and edit modes on switch
+  useEffect(() => {
+    setAiSubtaskSuggestions(null);
+    setAiSummary(null);
+    setAiTriage(null);
+    setIsAddingSubtask(false);
+    setNewSubtaskTitle('');
+    setIsEditingTitle(false);
+    setIsEditingDesc(false);
+  }, [issueIdentifier]);
+
   // Sync title and description state on load
   useEffect(() => {
     if (issue) {

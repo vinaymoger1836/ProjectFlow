@@ -264,7 +264,7 @@ export class ReleaseReadinessService {
               : 'No milestones linked to this release.',
         issueKeys: [],
       },
-      targetDateCheck(release, forecast.health, forecast.healthReason, now),
+      targetDateCheck(release, forecast.health, forecast.healthReason),
     ];
 
     const suggestions = buildSuggestions({ release, open, blocked, criticalBugs, otherReleases, activeSprints });
@@ -326,7 +326,6 @@ function targetDateCheck(
   release: ReleaseRecord,
   health: ReturnType<typeof assessMilestoneHealth>['health'],
   reason: string,
-  now: Date,
 ): ReadinessCheck {
   const base = { id: 'TARGET_DATE' as const, label: 'Target date achievable', critical: false, issueKeys: [] };
   if (release.status === 'RELEASED' && release.releasedAt) {
@@ -338,8 +337,8 @@ function targetDateCheck(
   if (health === 'OVERDUE' || health === 'AT_RISK') {
     return { ...base, status: 'WARN', detail: reason };
   }
-  const daysLeft = Math.ceil((release.targetDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-  return { ...base, status: 'PASS', detail: health === 'COMPLETED' ? 'All scope is done ahead of the target.' : `${daysLeft} day(s) to target. ${reason}` };
+  // The health reason already states days left and the forecast; no need to repeat them
+  return { ...base, status: 'PASS', detail: health === 'COMPLETED' ? 'All scope is done ahead of the target.' : reason };
 }
 
 function verdictOf(checks: ReadinessCheck[]): ReadinessVerdict {

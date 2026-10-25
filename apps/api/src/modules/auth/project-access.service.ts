@@ -14,26 +14,21 @@ export class ProjectAccessService {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Database) {}
 
   async assertProjectAccess(userId: string, projectId: string): Promise<ProjectRecord> {
-    const [project] = await this.db
-      .select()
+    // One round trip: the project plus whether the user holds any role in its organization
+    const [row] = await this.db
+      .select({ project: projects, membershipId: userRoles.id })
       .from(projects)
+      .leftJoin(userRoles, and(eq(userRoles.organizationId, projects.organizationId), eq(userRoles.userId, userId)))
       .where(eq(projects.id, projectId))
       .limit(1);
 
-    if (!project) {
+    if (!row) {
       throw new NotFoundException(`Project with ID '${projectId}' not found.`);
     }
-
-    const membership = await this.db
-      .select({ id: userRoles.id })
-      .from(userRoles)
-      .where(and(eq(userRoles.userId, userId), eq(userRoles.organizationId, project.organizationId)))
-      .limit(1);
-
-    if (membership.length === 0) {
+    if (!row.membershipId) {
       throw new ForbiddenException('Access denied: You do not have permission to access this project.');
     }
 
-    return project;
+    return row.project;
   }
 }
