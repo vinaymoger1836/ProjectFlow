@@ -75,8 +75,9 @@ export function SprintFormDialog({ projectId, open, onOpenChange, sprint, averag
         endDate: fromDateInputValue(endDate),
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
+    // Wait for the refetch so the page never shows a half-updated sprint after the dialog closes
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
       onOpenChange(false);
     },
   });
@@ -194,8 +195,9 @@ export function StartSprintDialog({ projectId, sprint, onOpenChange }: StartSpri
         startDate: fromDateInputValue(startDate),
         endDate: fromDateInputValue(endDate),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
+    // Wait for the refetch so the page never shows a half-updated sprint after the dialog closes
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
       onOpenChange(false);
     },
   });
@@ -297,9 +299,11 @@ export function CompleteSprintDialog({ projectId, sprint, rolloverCandidates, on
         rolloverTo: target,
         rolloverSprintId: target === 'SPRINT' ? targetSprintId : undefined,
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sprints', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['issues', projectId] });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['sprints', projectId] }),
+        queryClient.invalidateQueries({ queryKey: ['issues', projectId] }),
+      ]);
       onOpenChange(false);
     },
   });

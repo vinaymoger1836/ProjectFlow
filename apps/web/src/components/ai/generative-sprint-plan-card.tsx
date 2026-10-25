@@ -72,10 +72,12 @@ export function GenerativeSprintPlanCard({ plan, onApplied, onOpenIssue, onDisca
         endDate: plan.suggestedEndDate,
         issueIds: selected.map((i) => i.id),
       }),
-    onSuccess: (sprint) => {
+    onSuccess: async (sprint) => {
       setAppliedSprint(sprint);
-      queryClient.invalidateQueries({ queryKey: ['sprints', plan.projectId] });
-      queryClient.invalidateQueries({ queryKey: ['issues', plan.projectId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['sprints', plan.projectId] }),
+        queryClient.invalidateQueries({ queryKey: ['issues', plan.projectId] }),
+      ]);
       onApplied?.(sprint);
     },
   });

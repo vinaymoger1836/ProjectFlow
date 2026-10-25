@@ -69,14 +69,17 @@ export function BulkDiffDialog({
 
   const applyMutation = useMutation({
     mutationFn: () => api.bulkUpdateIssues(projectId, { operations: selectedOperations, source }),
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       setAppliedCount(result.items.length);
-      for (const key of ['issues', 'releases', 'milestones', 'sprints']) {
-        queryClient.invalidateQueries({ queryKey: [key, projectId] });
-      }
-      queryClient.invalidateQueries({ queryKey: ['issue'] });
+      // Close only after lists have refetched so the page never shows a half-applied state
+      await Promise.all([
+        ...['issues', 'releases', 'milestones', 'sprints'].map((key) =>
+          queryClient.invalidateQueries({ queryKey: [key, projectId] }),
+        ),
+        queryClient.invalidateQueries({ queryKey: ['issue'] }),
+      ]);
       onApplied?.(result);
-      setTimeout(() => onOpenChange(false), 900);
+      setTimeout(() => onOpenChange(false), 600);
     },
   });
 

@@ -30,10 +30,13 @@ import { toDateInputValue, fromDateInputValue } from '../sprints/sprint-utils';
 import { VERDICT_META } from './release-utils';
 import { cn } from '@/lib/utils';
 
+/** Resolves once active queries have refetched, so dialogs close onto fresh data. */
 function invalidatePlanning(queryClient: ReturnType<typeof useQueryClient>, projectId: string) {
-  queryClient.invalidateQueries({ queryKey: ['releases', projectId] });
-  queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
-  queryClient.invalidateQueries({ queryKey: ['issues', projectId] });
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['releases', projectId] }),
+    queryClient.invalidateQueries({ queryKey: ['milestones', projectId] }),
+    queryClient.invalidateQueries({ queryKey: ['issues', projectId] }),
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,8 +84,8 @@ export function ReleaseFormDialog({
             targetDate: fromDateInputValue(targetDate),
             description: description.trim() || undefined,
           }),
-    onSuccess: () => {
-      invalidatePlanning(queryClient, projectId);
+    onSuccess: async () => {
+      await invalidatePlanning(queryClient, projectId);
       onOpenChange(false);
     },
   });
@@ -192,8 +195,8 @@ export function MilestoneFormDialog({
             targetDate: fromDateInputValue(targetDate),
             description: description.trim() || undefined,
           }),
-    onSuccess: () => {
-      invalidatePlanning(queryClient, projectId);
+    onSuccess: async () => {
+      await invalidatePlanning(queryClient, projectId);
       onOpenChange(false);
     },
   });
@@ -355,8 +358,8 @@ export function ShipReleaseDialog({
         rolloverReleaseId: target === 'RELEASE' ? targetId : undefined,
         acknowledgeRisks: acknowledged || undefined,
       }),
-    onSuccess: () => {
-      invalidatePlanning(queryClient, projectId);
+    onSuccess: async () => {
+      await invalidatePlanning(queryClient, projectId);
       onOpenChange(false);
     },
   });
@@ -539,8 +542,8 @@ export function ReleaseNotesDialog({
 
   const saveMutation = useMutation({
     mutationFn: () => api.updateRelease(release!.id, { releaseNotes: notes.trim() ? notes : null }),
-    onSuccess: () => {
-      invalidatePlanning(queryClient, projectId);
+    onSuccess: async () => {
+      await invalidatePlanning(queryClient, projectId);
       onOpenChange(false);
     },
   });
