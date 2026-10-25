@@ -188,7 +188,6 @@ export class ProjectsService {
       .set({
         name: dto.name !== undefined ? dto.name : existing.name,
         description: dto.description !== undefined ? dto.description : existing.description,
-        healthStatus: dto.healthStatus !== undefined ? dto.healthStatus : existing.healthStatus,
         leadId: dto.leadId !== undefined ? dto.leadId : existing.leadId,
         teamId: dto.teamId !== undefined ? dto.teamId : existing.teamId,
         updatedAt: new Date(),

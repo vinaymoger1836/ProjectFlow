@@ -104,6 +104,19 @@ export function useProjectSocket(projectId?: string) {
       }
     });
 
+    // Health is recomputed in the background after changes; refresh tiles and dashboards
+    socket.on('project:health', () => {
+      queryClient.invalidateQueries({ queryKey: ['project-health', projectId] });
+    });
+
+    // Per-user events arrive on the socket's private room
+    socket.on('notification:new', () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    });
+    socket.on('notification:read', () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    });
+
     socket.on('comment:added', ({ issueId }: { issueId: string }) => {
       queryClient.invalidateQueries({ queryKey: ['issue-comments', issueId] });
       queryClient.invalidateQueries({ queryKey: ['issue', issueId] });

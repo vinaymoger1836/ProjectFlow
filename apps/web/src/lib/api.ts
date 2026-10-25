@@ -44,9 +44,29 @@ import {
   BulkChangePreview,
   BulkChangeSource,
   WorkProgress,
+  ProjectHealthReport,
+  ProjectHealthStatus,
+  HealthFactor,
+  CommandBarResponse,
+  CopilotProjectHealthBlock,
+  CopilotRiskReportBlock,
+  NotificationItem,
+  NotificationPage,
+  NotificationPreference,
+  NotificationSettings,
 } from '@projectflow/types';
 
 export type {
+  ProjectHealthReport,
+  ProjectHealthStatus,
+  HealthFactor,
+  CommandBarResponse,
+  CopilotProjectHealthBlock,
+  CopilotRiskReportBlock,
+  NotificationItem,
+  NotificationPage,
+  NotificationPreference,
+  NotificationSettings,
   MilestoneSummary,
   MilestoneHealth,
   ReleaseSummary,
@@ -570,6 +590,73 @@ export const api = {
     return request<BulkChangePreview>(`/projects/${projectId}/issues/bulk-update`, {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  },
+
+  // Project health
+  getProjectHealth: async (projectId: string): Promise<ProjectHealthReport> => {
+    return request<ProjectHealthReport>(`/projects/${projectId}/health`);
+  },
+
+  recomputeProjectHealth: async (projectId: string): Promise<ProjectHealthReport> => {
+    return request<ProjectHealthReport>(`/projects/${projectId}/health/recompute`, { method: 'POST' });
+  },
+
+  // Global command bar
+  runCommand: async (payload: { prompt: string; projectId?: string }, signal?: AbortSignal): Promise<CommandBarResponse> => {
+    return request<CommandBarResponse>('/command', { method: 'POST', body: JSON.stringify(payload), signal });
+  },
+
+  // Notifications
+  listNotifications: async (params: { before?: string; limit?: number; unreadOnly?: boolean } = {}): Promise<NotificationPage> => {
+    const query = new URLSearchParams();
+    if (params.before) query.set('before', params.before);
+    if (params.limit) query.set('limit', String(params.limit));
+    if (params.unreadOnly) query.set('unreadOnly', 'true');
+    const qs = query.toString();
+    return request<NotificationPage>(`/notifications${qs ? `?${qs}` : ''}`);
+  },
+
+  getUnreadNotificationCount: async (): Promise<{ unreadCount: number }> => {
+    return request<{ unreadCount: number }>('/notifications/unread-count');
+  },
+
+  markNotificationRead: async (notificationId: string): Promise<{ unreadCount: number }> => {
+    return request<{ unreadCount: number }>(`/notifications/${notificationId}/read`, { method: 'POST' });
+  },
+
+  markAllNotificationsRead: async (): Promise<{ unreadCount: number }> => {
+    return request<{ unreadCount: number }>('/notifications/read-all', { method: 'POST' });
+  },
+
+  getNotificationSettings: async (): Promise<NotificationSettings> => {
+    return request<NotificationSettings>('/notifications/settings');
+  },
+
+  updateNotificationPreferences: async (
+    preferences: Pick<NotificationPreference, 'type' | 'inApp' | 'email' | 'push'>[],
+  ): Promise<NotificationSettings> => {
+    return request<NotificationSettings>('/notifications/preferences', {
+      method: 'PUT',
+      body: JSON.stringify({ preferences }),
+    });
+  },
+
+  savePushSubscription: async (payload: {
+    endpoint: string;
+    keys: { p256dh: string; auth: string };
+    userAgent?: string;
+  }): Promise<NotificationSettings> => {
+    return request<NotificationSettings>('/notifications/push-subscriptions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  removePushSubscription: async (endpoint: string): Promise<NotificationSettings> => {
+    return request<NotificationSettings>('/notifications/push-subscriptions', {
+      method: 'DELETE',
+      body: JSON.stringify({ endpoint }),
     });
   },
 

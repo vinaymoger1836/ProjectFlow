@@ -11,9 +11,7 @@ import {
   Search,
   Layers,
   Settings,
-  Bell,
   Clock,
-  AlertTriangle,
   Plus,
   ArrowRight,
   Rocket,
@@ -28,6 +26,10 @@ import { BacklogView } from '@/components/sprints/backlog-view';
 import { ActiveSprintCard } from '@/components/sprints/active-sprint-card';
 import { ReleasesView } from '@/components/releases/releases-view';
 import { NextReleaseCard } from '@/components/releases/next-release-card';
+import { HealthStatusCard } from '@/components/health/health-status-card';
+import { NotificationCenter } from '@/components/notifications/notification-center';
+import { CommandBar, useCommandBarShortcut } from '@/components/command/command-bar';
+import { useProjectSocket } from '@/lib/use-socket';
 import { cn } from '@/lib/utils';
 
 type NavTab = 'overview' | 'issues' | 'board' | 'sprints' | 'releases';
@@ -41,9 +43,13 @@ function HomePageContent() {
   const [createSprintId, setCreateSprintId] = useState<string | undefined>(undefined);
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
   const projectId = '11111111-1111-1111-1111-111111111111';
 
   useSearchShortcut(useCallback(() => setIsSearchOpen(true), []));
+  useCommandBarShortcut(useCallback(() => setIsCommandOpen(true), []));
+  // Page-level connection: health and per-user notification events must arrive on every tab
+  useProjectSocket(projectId);
 
   // Sync drawer with URL ?issue=KEY
   useEffect(() => {
@@ -242,11 +248,11 @@ function HomePageContent() {
           {/* Top Navbar */}
           <header className="h-16 border-b border-border px-6 flex items-center justify-between bg-card/60 backdrop-blur-md shrink-0">
             {/* Issue Search Trigger */}
-            <div className="flex items-center gap-2 w-96">
+            <div className="flex items-center gap-2 w-[30rem]">
               <button
                 type="button"
                 onClick={() => setIsSearchOpen(true)}
-                className="w-full flex items-center justify-between px-3 py-1.5 text-xs bg-muted/40 border border-input rounded-md text-muted-foreground hover:border-primary transition-colors shadow-xs"
+                className="flex-1 flex items-center justify-between px-3 py-1.5 text-xs bg-muted/40 border border-input rounded-md text-muted-foreground hover:border-primary transition-colors shadow-xs"
               >
                 <span className="flex items-center gap-2">
                   <Search className="h-3.5 w-3.5" />
@@ -255,6 +261,17 @@ function HomePageContent() {
                 <kbd className="text-[10px] bg-background px-1.5 py-0.5 rounded border border-border font-mono">
                   /
                 </kbd>
+              </button>
+              {/* Global AI Command Bar trigger (Cmd/Ctrl+K) */}
+              <button
+                type="button"
+                onClick={() => setIsCommandOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary/10 border border-primary/30 rounded-md text-primary font-semibold hover:bg-primary/20 transition-colors shadow-xs"
+                title="Command bar: ask AI, navigate, or search (Ctrl/Cmd+K)"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Ask</span>
+                <kbd className="text-[10px] bg-background px-1.5 py-0.5 rounded border border-primary/30 font-mono">⌘K</kbd>
               </button>
             </div>
 
@@ -281,13 +298,7 @@ function HomePageContent() {
                 />
               </button>
 
-              <button
-                type="button"
-                className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground relative"
-              >
-                <Bell className="h-4 w-4" />
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
-              </button>
+              <NotificationCenter onOpenIssue={handleSelectIssue} />
               <div className="h-7 w-7 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-xs border border-primary/30">
                 U
               </div>
@@ -347,14 +358,7 @@ function HomePageContent() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <ActiveSprintCard projectId={projectId} onOpen={() => setActiveTab('board')} />
 
-                <div className="p-5 rounded-lg border border-border bg-card shadow-sm space-y-2">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Health Status</span>
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  </div>
-                  <div className="text-2xl font-bold text-amber-500">HEALTHY</div>
-                  <p className="text-xs text-muted-foreground">0 critical blockers • 1 P1 bug</p>
-                </div>
+                <HealthStatusCard projectId={projectId} onOpenIssue={handleSelectIssue} />
 
                 <NextReleaseCard projectId={projectId} onOpen={() => setActiveTab('releases')} />
               </div>
@@ -470,6 +474,18 @@ function HomePageContent() {
       issueIdentifier={selectedIssueKey}
       onClose={handleCloseDrawer}
       onSelectIssue={handleSelectIssue}
+    />
+
+    {/* Global AI Command Bar (Cmd/Ctrl+K) */}
+    <CommandBar
+      projectId={projectId}
+      projectKey="PAY"
+      open={isCommandOpen}
+      onOpenChange={setIsCommandOpen}
+      onNavigate={setActiveTab}
+      onSelectIssue={handleSelectIssue}
+      onCreateIssue={() => handleOpenCreateModal()}
+      onOpenCopilot={() => setIsCopilotOpen(true)}
     />
 
     {/* Hybrid Issue Search ("/" shortcut) */}

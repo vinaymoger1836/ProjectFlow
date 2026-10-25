@@ -10,6 +10,8 @@ import { GenerativeIssueList } from '../generative-issue-list';
 import { GenerativeMetricsCard } from '../generative-metrics-card';
 import { GenerativeIssueCard } from '../generative-issue-card';
 import { GenerativeSprintPlanCard } from '../generative-sprint-plan-card';
+import { ProjectHealthCard } from '../../health/project-health-card';
+import { RiskReportCard } from '../../health/risk-report-card';
 
 interface GenerativeBlockRendererProps {
   block: GenerativeBlock;
@@ -55,6 +57,12 @@ export function GenerativeBlockRenderer({
 
     case 'sprint_plan':
       return <GenerativeSprintPlanCard plan={block.plan} onOpenIssue={onOpenIssueInDrawer} />;
+
+    case 'project_health':
+      return <ProjectHealthCard report={block.report} onOpenIssue={onOpenIssueInDrawer} />;
+
+    case 'risk_report':
+      return <RiskReportCard block={block} onOpenIssue={onOpenIssueInDrawer} />;
 
     default:
       return null;

@@ -13,6 +13,9 @@ import { SearchModule } from './modules/search/search.module';
 import { SprintsModule } from './modules/sprints/sprints.module';
 import { MilestonesModule } from './modules/milestones/milestones.module';
 import { ReleasesModule } from './modules/releases/releases.module';
+import { ProjectHealthModule } from './modules/project-health/project-health.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { CommandModule } from './modules/command/command.module';
 import { HealthController } from './modules/health/health.controller';
 
 @Module({
@@ -43,6 +46,9 @@ import { HealthController } from './modules/health/health.controller';
     SprintsModule,
     MilestonesModule,
     ReleasesModule,
+    ProjectHealthModule,
+    NotificationsModule,
+    CommandModule,
   ],
   controllers: [HealthController],
   providers: [],
