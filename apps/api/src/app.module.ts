@@ -16,6 +16,7 @@ import { ReleasesModule } from './modules/releases/releases.module';
 import { ProjectHealthModule } from './modules/project-health/project-health.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { CommandModule } from './modules/command/command.module';
+import { AutomationsModule } from './modules/automations/automations.module';
 import { HealthController } from './modules/health/health.controller';
 
 @Module({
@@ -49,6 +50,7 @@ import { HealthController } from './modules/health/health.controller';
     ProjectHealthModule,
     NotificationsModule,
     CommandModule,
+    AutomationsModule,
   ],
   controllers: [HealthController],
   providers: [],

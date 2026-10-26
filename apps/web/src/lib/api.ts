@@ -54,9 +54,19 @@ import {
   NotificationPage,
   NotificationPreference,
   NotificationSettings,
+  AutomationSummary,
+  AutomationRunSummary,
+  AutomationTrigger,
+  AutomationCondition,
+  AutomationAction,
 } from '@projectflow/types';
 
 export type {
+  AutomationSummary,
+  AutomationRunSummary,
+  AutomationTrigger,
+  AutomationCondition,
+  AutomationAction,
   ProjectHealthReport,
   ProjectHealthStatus,
   HealthFactor,
@@ -168,6 +178,15 @@ export interface ActivityItem {
     email: string;
     avatarUrl?: string | null;
   } | null;
+}
+
+export interface AutomationInput {
+  name: string;
+  description?: string | null;
+  enabled?: boolean;
+  trigger: AutomationTrigger;
+  conditions: AutomationCondition[];
+  actions: AutomationAction[];
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -658,6 +677,37 @@ export const api = {
       method: 'DELETE',
       body: JSON.stringify({ endpoint }),
     });
+  },
+
+  // Automations
+  listAutomations: async (projectId: string): Promise<AutomationSummary[]> => {
+    return request<AutomationSummary[]>(`/projects/${projectId}/automations`);
+  },
+
+  createAutomation: async (projectId: string, payload: AutomationInput): Promise<AutomationSummary> => {
+    return request<AutomationSummary>(`/projects/${projectId}/automations`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateAutomation: async (automationId: string, payload: Partial<AutomationInput>): Promise<AutomationSummary> => {
+    return request<AutomationSummary>(`/automations/${automationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteAutomation: async (automationId: string): Promise<{ success: boolean; message: string }> => {
+    return request(`/automations/${automationId}`, { method: 'DELETE' });
+  },
+
+  listAutomationRuns: async (automationId: string, limit = 20): Promise<AutomationRunSummary[]> => {
+    return request<AutomationRunSummary[]>(`/automations/${automationId}/runs?limit=${limit}`);
+  },
+
+  runAutomation: async (automationId: string): Promise<AutomationRunSummary> => {
+    return request<AutomationRunSummary>(`/automations/${automationId}/run`, { method: 'POST' });
   },
 
   // Activities & Attachments
