@@ -137,6 +137,7 @@ export class IssuesService {
     this.eventEmitter.emit(DomainEvents.IssueCreated, {
       issueId: result.id,
       projectId,
+      actorId: userId,
     } satisfies IssueCreatedEvent);
     if (dto.assigneeId) {
       this.eventEmitter.emit(DomainEvents.IssueAssigned, {

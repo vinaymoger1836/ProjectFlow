@@ -741,7 +741,7 @@ export interface ProjectHealthReport {
   trend: ProjectHealthTrendPoint[];
 }
 
-export type NotificationType = 'ISSUE_ASSIGNED';
+export type NotificationType = 'ISSUE_ASSIGNED' | 'AUTOMATION';
 
 export interface NotificationItem {
   id: string;
@@ -810,4 +810,83 @@ export interface CommandBarResponse {
   /** Project keys the answer covers. */
   scope: string[];
   modelUsed: string;
+}
+
+// ==========================================
+// Automation Engine (Phase 8)
+// ==========================================
+
+export type AutomationTriggerType = 'ISSUE_CREATED' | 'SCHEDULE';
+
+export interface IssueCreatedTrigger {
+  type: 'ISSUE_CREATED';
+}
+
+export interface ScheduleTrigger {
+  type: 'SCHEDULE';
+  frequency: 'DAILY' | 'WEEKLY';
+  /** Local time of day, "HH:MM" (24h). */
+  time: string;
+  /** Days of the week for WEEKLY (0 = Sunday … 6 = Saturday); empty for DAILY. */
+  weekdays: number[];
+  /** IANA timezone the time is interpreted in, e.g. "Asia/Kolkata". */
+  timezone: string;
+}
+
+export type AutomationTrigger = IssueCreatedTrigger | ScheduleTrigger;
+
+export type AutomationSetOperator = 'IN' | 'NOT_IN';
+
+/** All conditions of an automation must match (AND). */
+export type AutomationCondition =
+  | { field: 'type'; operator: AutomationSetOperator; values: IssueType[] }
+  | { field: 'priority'; operator: AutomationSetOperator; values: IssuePriority[] }
+  | { field: 'status'; operator: AutomationSetOperator; values: StandardIssueStatus[] }
+  | { field: 'assignee'; operator: 'IN'; values: string[] }
+  | { field: 'assignee'; operator: 'UNASSIGNED'; values: [] };
+
+export type AutomationConditionField = AutomationCondition['field'];
+
+export type AutomationRecipient = 'ASSIGNEE' | 'REPORTER';
+
+export interface NotifyAction {
+  type: 'NOTIFY';
+  recipients: AutomationRecipient[];
+  /** Optional text shown before the issue details. */
+  message: string | null;
+}
+
+export type AutomationAction = NotifyAction;
+
+export type AutomationRunStatus = 'RUNNING' | 'SUCCESS' | 'FAILED';
+
+export interface AutomationRunSummary {
+  id: string;
+  automationId: string;
+  status: AutomationRunStatus;
+  triggerType: AutomationTriggerType;
+  /** True for "Run now" executions of a scheduled automation. */
+  manual: boolean;
+  /** Triggering issue (ISSUE_CREATED runs only). */
+  issueKey: string | null;
+  matchedCount: number;
+  notifiedCount: number;
+  error: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export interface AutomationSummary {
+  id: string;
+  projectId: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  trigger: AutomationTrigger;
+  conditions: AutomationCondition[];
+  actions: AutomationAction[];
+  createdBy: { id: string; name: string } | null;
+  lastRun: AutomationRunSummary | null;
+  createdAt: string;
+  updatedAt: string;
 }

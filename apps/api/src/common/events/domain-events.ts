@@ -13,6 +13,7 @@ export const DomainEvents = {
 export interface IssueCreatedEvent {
   issueId: string;
   projectId: string;
+  actorId: string;
 }
 
 export interface IssueUpdatedEvent {

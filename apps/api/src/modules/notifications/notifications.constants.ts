@@ -18,6 +18,11 @@ export const NOTIFICATION_CATALOG: Record<NotificationType, NotificationDefiniti
     // Push only reaches browsers that opted in, so enabling it by default sends nothing unexpected
     defaults: { inApp: true, email: true, push: true },
   },
+  AUTOMATION: {
+    label: 'Automation rules',
+    description: 'A project automation tells you about a new matching issue, or sends its scheduled digest of matching issues.',
+    defaults: { inApp: true, email: true, push: true },
+  },
 };
 
 export const NOTIFICATION_TYPES = Object.keys(NOTIFICATION_CATALOG) as NotificationType[];

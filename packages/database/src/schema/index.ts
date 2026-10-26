@@ -10,3 +10,4 @@ export * from './activities';
 export * from './search';
 export * from './health';
 export * from './notifications';
+export * from './automations';
