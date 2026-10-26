@@ -20,6 +20,7 @@ import {
   Loader2,
   AlertTriangle,
   CircleDot,
+  Zap,
 } from 'lucide-react';
 import { api, CommandBarResponse, IssueSearchResult } from '@/lib/api';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
@@ -27,7 +28,7 @@ import { GenerativeBlockRenderer } from '../ai/primitives/generative-block-rende
 import { GenerativeMarkdown } from '../ai/generative-markdown';
 import { cn } from '@/lib/utils';
 
-export type CommandBarTab = 'overview' | 'issues' | 'board' | 'sprints' | 'releases';
+export type CommandBarTab = 'overview' | 'issues' | 'board' | 'sprints' | 'releases' | 'automations';
 
 type CommandItem =
   | { kind: 'ask'; id: string; label: string; prompt: string }
@@ -120,6 +121,7 @@ export function CommandBar({
       { kind: 'action', id: 'go-board', label: 'Go to Active Board', hint: 'Navigate', icon: Kanban, keywords: 'board kanban sprint', run: runAndClose(() => onNavigate('board')) },
       { kind: 'action', id: 'go-sprints', label: 'Go to Backlog & Sprints', hint: 'Navigate', icon: Calendar, keywords: 'sprints backlog planning velocity', run: runAndClose(() => onNavigate('sprints')) },
       { kind: 'action', id: 'go-releases', label: 'Go to Releases & Milestones', hint: 'Navigate', icon: Rocket, keywords: 'releases milestones readiness notes', run: runAndClose(() => onNavigate('releases')) },
+      { kind: 'action', id: 'go-automations', label: 'Go to Automations', hint: 'Navigate', icon: Zap, keywords: 'automations rules triggers schedule digest workflow', run: runAndClose(() => onNavigate('automations')) },
       { kind: 'action', id: 'create-issue', label: 'Create issue', hint: 'Action', icon: Plus, keywords: 'new issue bug task story create add', run: runAndClose(onCreateIssue) },
       { kind: 'action', id: 'open-copilot', label: 'Open AI Copilot', hint: 'Action', icon: Bot, keywords: 'copilot chat ai assistant', run: runAndClose(onOpenCopilot) },
       {

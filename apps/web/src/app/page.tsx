@@ -15,6 +15,7 @@ import {
   Plus,
   ArrowRight,
   Rocket,
+  Zap,
 } from 'lucide-react';
 import { IssuesView } from '@/components/issues/issues-view';
 import { KanbanBoard } from '@/components/kanban/kanban-board';
@@ -29,10 +30,11 @@ import { NextReleaseCard } from '@/components/releases/next-release-card';
 import { HealthStatusCard } from '@/components/health/health-status-card';
 import { NotificationCenter } from '@/components/notifications/notification-center';
 import { CommandBar, useCommandBarShortcut } from '@/components/command/command-bar';
+import { AutomationsView } from '@/components/automations/automations-view';
 import { useProjectSocket } from '@/lib/use-socket';
 import { cn } from '@/lib/utils';
 
-type NavTab = 'overview' | 'issues' | 'board' | 'sprints' | 'releases';
+type NavTab = 'overview' | 'issues' | 'board' | 'sprints' | 'releases' | 'automations';
 
 function HomePageContent() {
   const searchParams = useSearchParams();
@@ -183,6 +185,20 @@ function HomePageContent() {
             >
               <Rocket className={cn('h-4 w-4', activeTab === 'releases' ? 'text-primary' : '')} />
               <span>Releases & Milestones</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('automations')}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium text-sm transition-colors text-left',
+                activeTab === 'automations'
+                  ? 'bg-secondary text-foreground font-semibold shadow-xs'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              <Zap className={cn('h-4 w-4', activeTab === 'automations' ? 'text-primary' : '')} />
+              <span>Automations</span>
             </button>
 
             <div className="pt-4 text-xs font-semibold text-muted-foreground px-3 py-2 uppercase tracking-wider">
@@ -447,6 +463,18 @@ function HomePageContent() {
                 </p>
               </div>
               <ReleasesView projectId={projectId} onSelectIssue={handleSelectIssue} />
+            </div>
+          )}
+
+          {activeTab === 'automations' && (
+            <div className="space-y-4">
+              <div className="border-b border-border pb-2">
+                <h3 className="text-lg font-bold">Automations</h3>
+                <p className="text-xs text-muted-foreground">
+                  When an issue is created or on a schedule, check conditions, then notify the right people. Every run is logged.
+                </p>
+              </div>
+              <AutomationsView projectId={projectId} />
             </div>
           )}
         </div>
