@@ -4,14 +4,18 @@ import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { AutomationsService } from './automations.service';
-import { AutomationRunsQueryDto, CreateAutomationDto, UpdateAutomationDto } from './dto/automation.dto';
+import { AutomationDraftService } from './automation-draft.service';
+import { AutomationRunsQueryDto, CreateAutomationDto, DraftAutomationDto, UpdateAutomationDto } from './dto/automation.dto';
 
 @ApiTags('Automations')
 @ApiBearerAuth()
 @UseGuards(SupabaseAuthGuard)
 @Controller()
 export class AutomationsController {
-  constructor(private readonly automationsService: AutomationsService) {}
+  constructor(
+    private readonly automationsService: AutomationsService,
+    private readonly draftService: AutomationDraftService,
+  ) {}
 
   @Get('projects/:projectId/automations')
   @ApiOperation({ summary: 'List project automations with their latest run' })
@@ -33,6 +37,19 @@ export class AutomationsController {
     @Body() dto: CreateAutomationDto,
   ) {
     const data = await this.automationsService.createAutomation(user.id, projectId, dto);
+    return { success: true, data };
+  }
+
+  @Post('projects/:projectId/automations/draft')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Draft an automation from plain English (validated, with warnings; not saved)' })
+  @ApiParam({ name: 'projectId', description: 'Project UUID' })
+  async draftAutomation(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: DraftAutomationDto,
+  ) {
+    const data = await this.draftService.draft(user.id, projectId, dto);
     return { success: true, data };
   }
 

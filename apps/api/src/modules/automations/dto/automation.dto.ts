@@ -80,6 +80,20 @@ export class UpdateAutomationDto {
   actions?: unknown[];
 }
 
+export class DraftAutomationDto {
+  @ApiProperty({ example: 'Every Monday at 9am, send each assignee their open P0 and P1 bugs' })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(1000)
+  prompt: string;
+
+  @ApiPropertyOptional({ example: 'Asia/Kolkata', description: 'IANA timezone for schedules that do not name one (default UTC)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  timezone?: string;
+}
+
 export class AutomationRunsQueryDto {
   @ApiPropertyOptional({ default: 20, maximum: 100 })
   @IsOptional()
