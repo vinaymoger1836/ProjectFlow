@@ -1,12 +1,22 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { and, asc, eq, inArray, isNull, notInArray, SQL } from 'drizzle-orm';
 import { Database, automations, automationRuns, issues, projects } from '@projectflow/database';
-import { AutomationCondition, AutomationRunSummary, NotifyAction } from '@projectflow/types';
+import {
+  AiIssueCategory,
+  AiIssueClassification,
+  AutomationCondition,
+  AutomationRunDetails,
+  AutomationRunSummary,
+  NotifyAction,
+} from '@projectflow/types';
 import { DRIZZLE_DB } from '../database/database.module';
 import { NotificationsService, NotifyInput } from '../notifications/notifications.service';
 import { DIGEST_KEY_PREVIEW, IssueCreatedJobData, SCHEDULED_MATCH_LIMIT } from './automations.constants';
+import { IssueClassifierService } from './issue-classifier.service';
+import { AI_CATEGORY_LABELS } from './issue-classification';
 
 type AutomationRecord = typeof automations.$inferSelect;
+type AiCondition = Extract<AutomationCondition, { field: 'ai' }>;
 
 interface MatchedIssue {
   id: string;
@@ -45,6 +55,7 @@ export class AutomationEngineService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Database,
     private readonly notifications: NotificationsService,
+    private readonly classifier: IssueClassifierService,
   ) {}
 
   /** ISSUE_CREATED: notify about the new issue for each enabled automation whose conditions it matches. */
@@ -68,23 +79,42 @@ export class AutomationEngineService {
     ]);
     if (rules.length === 0 || !project) return 0;
 
+    // The issue is classified at most once, and only when a rule with an AI condition matched on everything else
+    let classification: Promise<AiIssueClassification> | null = null;
+
     const results = await Promise.all(
       rules.map(async (rule) => {
         const [issue] = await this.db
-          .select(MATCHED_ISSUE_COLUMNS)
+          .select({ ...MATCHED_ISSUE_COLUMNS, description: issues.description })
           .from(issues)
           .where(and(eq(issues.id, job.issueId), activeIssuesOf(job.projectId), conditionsToSql(rule.conditions)))
           .limit(1);
         if (!issue) return false;
 
-        const runId = await this.claim(rule, `issue-${job.issueId}`, { issueId: issue.id });
+        let details: AutomationRunDetails | null = null;
+        let flagged: AiIssueCategory[] = [];
+        const aiCondition = rule.conditions.find((c): c is AiCondition => c.field === 'ai');
+        if (aiCondition) {
+          classification ??= this.classifier.classify(issue, {
+            organizationId: project.organizationId,
+            projectId: project.id,
+            issueKey: issue.issueKey,
+            actorId: job.actorId,
+          });
+          const verdict = await classification;
+          flagged = aiCondition.values.filter((c) => verdict.categories.includes(c));
+          if (flagged.length === 0) return false;
+          details = { ai: verdict };
+        }
+
+        const runId = await this.claim(rule, `issue-${job.issueId}`, { issueId: issue.id, details });
         if (!runId) return false;
 
         await this.execute(runId, async () => {
           const recipientIds = [...recipientsFor(rule.actions, [issue], job.actorId).keys()];
           const delivery = await this.notifyAll(
             recipientIds.map((recipientId) => ({
-              ...issueNotification(rule, project, issue, recipientId),
+              ...issueNotification(rule, project, issue, recipientId, flagged),
               title: `${rule.name}: ${issue.issueKey} created`,
               actorId: job.actorId,
             })),
@@ -145,7 +175,7 @@ export class AutomationEngineService {
   private async claim(
     rule: AutomationRecord,
     triggerKey: string,
-    extra: { issueId?: string; manual?: boolean },
+    extra: { issueId?: string; manual?: boolean; details?: AutomationRunDetails | null },
   ): Promise<string | null> {
     const [row] = await this.db
       .insert(automationRuns)
@@ -156,6 +186,7 @@ export class AutomationEngineService {
         triggerKey,
         manual: extra.manual ?? false,
         issueId: extra.issueId ?? null,
+        details: extra.details ?? null,
         status: 'RUNNING',
       })
       .onConflictDoNothing({ target: [automationRuns.automationId, automationRuns.triggerKey] })
@@ -201,20 +232,22 @@ function activeIssuesOf(projectId: string): SQL {
   return and(eq(issues.projectId, projectId), eq(issues.isArchived, false), isNull(issues.deletedAt)) as SQL;
 }
 
-/** ANDs every condition; an empty list matches everything. */
+/** ANDs every condition; an empty list matches everything. AI conditions are evaluated after the SQL match. */
 export function conditionsToSql(conditions: AutomationCondition[]): SQL | undefined {
-  const clauses = conditions.map((condition): SQL => {
+  const clauses = conditions.flatMap((condition): SQL[] => {
     switch (condition.field) {
       case 'type':
-        return condition.operator === 'IN' ? inArray(issues.type, condition.values) : notInArray(issues.type, condition.values);
+        return [condition.operator === 'IN' ? inArray(issues.type, condition.values) : notInArray(issues.type, condition.values)];
       case 'priority':
-        return condition.operator === 'IN'
-          ? inArray(issues.priority, condition.values)
-          : notInArray(issues.priority, condition.values);
+        return [
+          condition.operator === 'IN' ? inArray(issues.priority, condition.values) : notInArray(issues.priority, condition.values),
+        ];
       case 'status':
-        return condition.operator === 'IN' ? inArray(issues.status, condition.values) : notInArray(issues.status, condition.values);
+        return [condition.operator === 'IN' ? inArray(issues.status, condition.values) : notInArray(issues.status, condition.values)];
       case 'assignee':
-        return condition.operator === 'UNASSIGNED' ? isNull(issues.assigneeId) : inArray(issues.assigneeId, condition.values);
+        return [condition.operator === 'UNASSIGNED' ? isNull(issues.assigneeId) : inArray(issues.assigneeId, condition.values)];
+      case 'ai':
+        return [];
     }
   });
   return clauses.length > 0 ? and(...clauses) : undefined;
@@ -249,14 +282,21 @@ function withMessage(rule: AutomationRecord, text: string): string {
   return message ? `${message} · ${text}` : text;
 }
 
-function issueNotification(rule: AutomationRecord, project: ProjectContext, issue: MatchedIssue, recipientId: string): NotifyInput {
+function issueNotification(
+  rule: AutomationRecord,
+  project: ProjectContext,
+  issue: MatchedIssue,
+  recipientId: string,
+  flagged: AiIssueCategory[] = [],
+): NotifyInput {
+  const aiNote = flagged.length > 0 ? `AI: ${flagged.map((c) => AI_CATEGORY_LABELS[c]).join(', ')} · ` : '';
   return {
     recipientId,
     organizationId: project.organizationId,
     projectId: project.id,
     type: 'AUTOMATION',
     title: `${rule.name}: ${issue.issueKey}`,
-    body: withMessage(rule, `${issue.priority} ${issue.type} · ${issue.title}`),
+    body: withMessage(rule, `${aiNote}${issue.priority} ${issue.type} · ${issue.title}`),
     link: `/?issue=${encodeURIComponent(issue.issueKey)}`,
     entityType: 'ISSUE',
     entityId: issue.id,
@@ -294,6 +334,7 @@ export function toRunSummary(run: typeof automationRuns.$inferSelect, issueKey: 
     matchedCount: run.matchedCount,
     notifiedCount: run.notifiedCount,
     error: run.error,
+    details: run.details ?? null,
     startedAt: run.startedAt.toISOString(),
     finishedAt: run.finishedAt?.toISOString() ?? null,
   };

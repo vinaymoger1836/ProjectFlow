@@ -2,6 +2,7 @@ import { pgTable, uuid, varchar, text, boolean, integer, jsonb, timestamp, index
 import type {
   AutomationAction,
   AutomationCondition,
+  AutomationRunDetails,
   AutomationRunStatus,
   AutomationTrigger,
   AutomationTriggerType,
@@ -53,6 +54,7 @@ export const automationRuns = pgTable('automation_runs', {
   matchedCount: integer('matched_count').default(0).notNull(),
   notifiedCount: integer('notified_count').default(0).notNull(),
   error: text('error'),
+  details: jsonb('details').$type<AutomationRunDetails>(),
   startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
 }, (table) => [

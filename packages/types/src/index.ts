@@ -837,13 +837,18 @@ export type AutomationTrigger = IssueCreatedTrigger | ScheduleTrigger;
 
 export type AutomationSetOperator = 'IN' | 'NOT_IN';
 
+/** Categories the AI condition hook can detect in a new issue's title and description. */
+export type AiIssueCategory = 'NEGATIVE_SENTIMENT' | 'URGENT' | 'SECURITY' | 'CUSTOMER_IMPACT';
+
 /** All conditions of an automation must match (AND). */
 export type AutomationCondition =
   | { field: 'type'; operator: AutomationSetOperator; values: IssueType[] }
   | { field: 'priority'; operator: AutomationSetOperator; values: IssuePriority[] }
   | { field: 'status'; operator: AutomationSetOperator; values: StandardIssueStatus[] }
   | { field: 'assignee'; operator: 'IN'; values: string[] }
-  | { field: 'assignee'; operator: 'UNASSIGNED'; values: [] };
+  | { field: 'assignee'; operator: 'UNASSIGNED'; values: [] }
+  /** Issue-created rules only: the issue is classified once, by the LLM or the keyword fallback. */
+  | { field: 'ai'; operator: 'ANY_OF'; values: AiIssueCategory[] };
 
 export type AutomationConditionField = AutomationCondition['field'];
 
@@ -860,6 +865,19 @@ export type AutomationAction = NotifyAction;
 
 export type AutomationRunStatus = 'RUNNING' | 'SUCCESS' | 'FAILED';
 
+export interface AiIssueClassification {
+  categories: AiIssueCategory[];
+  /** "llm" when a model answered; "heuristic" for the keyword fallback. */
+  source: 'llm' | 'heuristic';
+  model: string;
+  reason: string | null;
+}
+
+/** Explains why a run fired, e.g. the AI verdict behind an AI condition. */
+export interface AutomationRunDetails {
+  ai?: AiIssueClassification;
+}
+
 export interface AutomationRunSummary {
   id: string;
   automationId: string;
@@ -872,6 +890,7 @@ export interface AutomationRunSummary {
   matchedCount: number;
   notifiedCount: number;
   error: string | null;
+  details: AutomationRunDetails | null;
   startedAt: string;
   finishedAt: string | null;
 }
@@ -889,4 +908,16 @@ export interface AutomationSummary {
   lastRun: AutomationRunSummary | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A rule drafted from plain English; never saved until the user reviews it in the builder. */
+export interface AutomationDraft {
+  name: string;
+  description: string | null;
+  trigger: AutomationTrigger;
+  conditions: AutomationCondition[];
+  actions: AutomationAction[];
+  /** Parts of the request that could not be expressed, or were adjusted. */
+  warnings: string[];
+  modelUsed: string;
 }

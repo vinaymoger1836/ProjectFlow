@@ -1,4 +1,5 @@
 import type {
+  AiIssueCategory,
   AutomationAction,
   AutomationCondition,
   AutomationRecipient,
@@ -27,6 +28,7 @@ export const ISSUE_STATUSES: readonly StandardIssueStatus[] = [
   'DONE',
   'CANCELLED',
 ];
+export const AI_CATEGORIES: readonly AiIssueCategory[] = ['NEGATIVE_SENTIMENT', 'URGENT', 'SECURITY', 'CUSTOMER_IMPACT'];
 const RECIPIENTS: readonly AutomationRecipient[] = ['ASSIGNEE', 'REPORTER'];
 const SET_OPERATORS: readonly AutomationSetOperator[] = ['IN', 'NOT_IN'];
 
@@ -57,9 +59,17 @@ export function parseAutomationDefinition(input: {
   const trigger = parseTrigger(input.trigger, problems);
   const conditions = parseConditions(input.conditions, problems);
   const actions = parseActions(input.actions, problems);
+  if (trigger) problems.push(...crossCheck(trigger, conditions));
 
   if (problems.length > 0 || !trigger) throw new AutomationDefinitionError(problems);
   return { trigger, conditions, actions };
+}
+
+/** Rules spanning trigger and conditions. AI conditions classify one new issue, never a whole schedule's matches. */
+export function crossCheck(trigger: AutomationTrigger, conditions: AutomationCondition[]): string[] {
+  return trigger.type === 'SCHEDULE' && conditions.some((c) => c.field === 'ai')
+    ? ['AI conditions only work with the "issue created" trigger.']
+    : [];
 }
 
 export function parseTrigger(value: unknown, problems: string[]): AutomationTrigger | null {
@@ -163,8 +173,25 @@ export function parseConditions(value: unknown, problems: string[]): AutomationC
         result.push({ field, operator: 'IN', values: [...new Set(ids as string[])] });
         return;
       }
+      case 'ai': {
+        const categories = raw.values;
+        if (raw.operator !== 'ANY_OF') {
+          problems.push(`${at}.operator must be ANY_OF for ai.`);
+          return;
+        }
+        if (
+          !Array.isArray(categories) ||
+          categories.length === 0 ||
+          !categories.every((c) => AI_CATEGORIES.includes(c as AiIssueCategory))
+        ) {
+          problems.push(`${at}.values must list one or more of ${AI_CATEGORIES.join(', ')}.`);
+          return;
+        }
+        result.push({ field, operator: 'ANY_OF', values: [...new Set(categories as AiIssueCategory[])] });
+        return;
+      }
       default:
-        problems.push(`${at}.field must be one of type, priority, status, assignee.`);
+        problems.push(`${at}.field must be one of type, priority, status, assignee, ai.`);
     }
   });
   return result;
