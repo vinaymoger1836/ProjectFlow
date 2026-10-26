@@ -59,9 +59,11 @@ import {
   AutomationTrigger,
   AutomationCondition,
   AutomationAction,
+  AutomationDraft,
 } from '@projectflow/types';
 
 export type {
+  AutomationDraft,
   AutomationSummary,
   AutomationRunSummary,
   AutomationTrigger,
@@ -686,6 +688,13 @@ export const api = {
 
   createAutomation: async (projectId: string, payload: AutomationInput): Promise<AutomationSummary> => {
     return request<AutomationSummary>(`/projects/${projectId}/automations`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  draftAutomation: async (projectId: string, payload: { prompt: string; timezone?: string }): Promise<AutomationDraft> => {
+    return request<AutomationDraft>(`/projects/${projectId}/automations/draft`, {
       method: 'POST',
       body: JSON.stringify(payload),
     });

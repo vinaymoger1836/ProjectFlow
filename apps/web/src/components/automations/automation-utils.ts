@@ -1,4 +1,5 @@
 import type {
+  AiIssueCategory,
   AutomationCondition,
   AutomationRecipient,
   AutomationRunStatus,
@@ -33,6 +34,13 @@ export const STATUS_OPTIONS: { value: StandardIssueStatus; label: string }[] = [
   { value: 'CANCELLED', label: 'Cancelled' },
 ];
 
+export const AI_CATEGORY_OPTIONS: { value: AiIssueCategory; label: string; hint: string }[] = [
+  { value: 'URGENT', label: 'Urgent', hint: 'Outages, production down, data loss, explicit urgency' },
+  { value: 'SECURITY', label: 'Security', hint: 'Vulnerabilities, leaks, auth or permission flaws' },
+  { value: 'CUSTOMER_IMPACT', label: 'Customer impact', hint: 'Failed payments, broken checkout, complaints' },
+  { value: 'NEGATIVE_SENTIMENT', label: 'Negative sentiment', hint: 'Frustrated or angry reporter or customer' },
+];
+
 export const RECIPIENT_LABELS: Record<AutomationRecipient, string> = {
   ASSIGNEE: 'assignee',
   REPORTER: 'reporter',
@@ -49,9 +57,10 @@ const FIELD_LABELS: Record<AutomationCondition['field'], string> = {
   priority: 'Priority',
   status: 'Status',
   assignee: 'Assignee',
+  ai: 'AI detects',
 };
 
-const OPTION_LABELS = new Map<string, string>([...TYPE_OPTIONS, ...STATUS_OPTIONS].map((o) => [o.value, o.label]));
+const OPTION_LABELS = new Map<string, string>([...TYPE_OPTIONS, ...STATUS_OPTIONS, ...AI_CATEGORY_OPTIONS].map((o) => [o.value, o.label]));
 
 export function describeTrigger(trigger: AutomationTrigger): string {
   if (trigger.type === 'ISSUE_CREATED') return 'When an issue is created';
@@ -66,6 +75,9 @@ export function describeTrigger(trigger: AutomationTrigger): string {
 
 export function describeCondition(condition: AutomationCondition, memberName: (id: string) => string): string {
   const field = FIELD_LABELS[condition.field];
+  if (condition.field === 'ai') {
+    return `${field} ${condition.values.map((v) => OPTION_LABELS.get(v) ?? v).join(' or ')}`;
+  }
   if (condition.field === 'assignee') {
     return condition.operator === 'UNASSIGNED'
       ? 'Unassigned'

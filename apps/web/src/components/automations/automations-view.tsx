@@ -18,12 +18,21 @@ import {
   CheckCircle2,
   X,
   Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { api, AutomationRunSummary, AutomationSummary } from '@/lib/api';
 import { formatRelativeTime } from '../health/health-utils';
 import { AutomationFormDialog } from './automation-form-dialog';
-import { RUN_STATUS_META, describeCondition, describeRecipients, describeTrigger } from './automation-utils';
+import {
+  AI_CATEGORY_OPTIONS,
+  RUN_STATUS_META,
+  describeCondition,
+  describeRecipients,
+  describeTrigger,
+} from './automation-utils';
 import { cn } from '@/lib/utils';
+
+const AI_LABELS = new Map<string, string>(AI_CATEGORY_OPTIONS.map((o) => [o.value, o.label]));
 
 interface AutomationsViewProps {
   projectId: string;
@@ -329,6 +338,18 @@ function RunHistory({ automation }: { automation: AutomationSummary }) {
               <span>
                 {run.matchedCount} matched · {run.notifiedCount} notified
               </span>
+              {run.details?.ai && (
+                <span
+                  title={run.details.ai.reason ?? undefined}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary font-medium"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  {run.details.ai.categories.map((c) => AI_LABELS.get(c) ?? c).join(', ')}
+                  <span className="text-muted-foreground font-normal">
+                    · {run.details.ai.source === 'llm' ? run.details.ai.model : 'keywords'}
+                  </span>
+                </span>
+              )}
               {run.error && <span className="text-red-400 truncate max-w-full">{run.error}</span>}
             </li>
           ))}

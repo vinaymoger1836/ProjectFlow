@@ -2,14 +2,14 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Zap, Plus, X, CalendarClock, FilePlus2, Bell } from 'lucide-react';
+import { Zap, Plus, X, CalendarClock, FilePlus2, Bell, Sparkles, Loader2, AlertTriangle } from 'lucide-react';
 import type {
   AutomationCondition,
   AutomationConditionField,
   AutomationRecipient,
   AutomationTrigger,
 } from '@projectflow/types';
-import { api, AutomationInput, AutomationSummary } from '@/lib/api';
+import { api, AutomationDraft, AutomationInput, AutomationSummary } from '@/lib/api';
 import {
   DialogShell,
   ErrorNote,
@@ -23,12 +23,13 @@ import {
   TYPE_OPTIONS,
   PRIORITY_OPTIONS,
   STATUS_OPTIONS,
+  AI_CATEGORY_OPTIONS,
   browserTimeZone,
   timeZoneOptions,
 } from './automation-utils';
 import { cn } from '@/lib/utils';
 
-type DraftOperator = 'IN' | 'NOT_IN' | 'UNASSIGNED';
+type DraftOperator = 'IN' | 'NOT_IN' | 'UNASSIGNED' | 'ANY_OF';
 
 interface DraftCondition {
   field: AutomationConditionField;
@@ -48,6 +49,7 @@ const FIELD_ORDER: { field: AutomationConditionField; label: string }[] = [
   { field: 'priority', label: 'Priority' },
   { field: 'status', label: 'Status' },
   { field: 'assignee', label: 'Assignee' },
+  { field: 'ai', label: 'AI detects' },
 ];
 
 const MESSAGE_LIMIT = 500;
@@ -66,10 +68,12 @@ function toCondition(draft: DraftCondition): AutomationCondition | null {
     case 'assignee':
       if (draft.operator === 'UNASSIGNED') return { field: 'assignee', operator: 'UNASSIGNED', values: [] };
       return draft.values.length > 0 ? { field: 'assignee', operator: 'IN', values: draft.values } : null;
+    case 'ai':
+      return draft.values.length > 0 ? ({ field: 'ai', operator: 'ANY_OF', values: draft.values } as AutomationCondition) : null;
     case 'type':
     case 'priority':
     case 'status': {
-      if (draft.operator === 'UNASSIGNED' || draft.values.length === 0) return null;
+      if ((draft.operator !== 'IN' && draft.operator !== 'NOT_IN') || draft.values.length === 0) return null;
       return { field: draft.field, operator: draft.operator, values: draft.values } as AutomationCondition;
     }
   }
@@ -94,6 +98,8 @@ export function AutomationFormDialog({
   const [conditions, setConditions] = useState<DraftCondition[]>([]);
   const [recipients, setRecipients] = useState<AutomationRecipient[]>(['ASSIGNEE']);
   const [message, setMessage] = useState('');
+  const [describe, setDescribe] = useState('');
+  const [drafted, setDrafted] = useState<Pick<AutomationDraft, 'warnings' | 'modelUsed'> | null>(null);
 
   const { data: members = [] } = useQuery({
     queryKey: ['project-members', projectId],
@@ -116,6 +122,8 @@ export function AutomationFormDialog({
     setConditions(automation ? toDraftConditions(automation.conditions) : []);
     setRecipients(notify?.recipients ?? ['ASSIGNEE']);
     setMessage(notify?.message ?? '');
+    setDescribe('');
+    setDrafted(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, automation?.id]);
 
@@ -123,7 +131,32 @@ export function AutomationFormDialog({
   const builtConditions = conditions.map(toCondition);
   const incompleteCondition = builtConditions.some((c) => c === null);
   const scheduleInvalid = triggerType === 'SCHEDULE' && schedule.frequency === 'WEEKLY' && schedule.weekdays.length === 0;
-  const canSave = name.trim().length > 0 && recipients.length > 0 && !incompleteCondition && !scheduleInvalid && Boolean(schedule.time);
+  const aiOnSchedule = triggerType === 'SCHEDULE' && conditions.some((c) => c.field === 'ai');
+  const canSave =
+    name.trim().length > 0 &&
+    recipients.length > 0 &&
+    !incompleteCondition &&
+    !scheduleInvalid &&
+    !aiOnSchedule &&
+    Boolean(schedule.time);
+
+  // Fills the builder with a drafted rule; nothing is saved until the user presses Create
+  const draftMutation = useMutation({
+    mutationFn: () => api.draftAutomation(projectId, { prompt: describe.trim(), timezone: browserTimeZone() }),
+    onSuccess: (draft) => {
+      const notify = draft.actions.find((a) => a.type === 'NOTIFY');
+      setName(draft.name);
+      setTriggerType(draft.trigger.type);
+      if (draft.trigger.type === 'SCHEDULE') {
+        const { frequency, time, weekdays, timezone } = draft.trigger;
+        setSchedule({ frequency, time, weekdays, timezone });
+      }
+      setConditions(toDraftConditions(draft.conditions));
+      setRecipients(notify?.recipients ?? ['ASSIGNEE']);
+      setMessage(notify?.message ?? '');
+      setDrafted({ warnings: draft.warnings, modelUsed: draft.modelUsed });
+    },
+  });
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -160,7 +193,9 @@ export function AutomationFormDialog({
     }
   };
 
-  const unusedFields = FIELD_ORDER.filter((f) => !conditions.some((c) => c.field === f.field));
+  const unusedFields = FIELD_ORDER.filter(
+    (f) => !conditions.some((c) => c.field === f.field) && (f.field !== 'ai' || triggerType === 'ISSUE_CREATED'),
+  );
   const updateCondition = (index: number, patch: Partial<DraftCondition>) =>
     setConditions((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
 
@@ -168,7 +203,10 @@ export function AutomationFormDialog({
     <DialogShell
       open={open}
       onOpenChange={(next) => {
-        if (!next) mutation.reset();
+        if (!next) {
+          mutation.reset();
+          draftMutation.reset();
+        }
         onOpenChange(next);
       }}
       size="lg"
@@ -184,6 +222,52 @@ export function AutomationFormDialog({
         </>
       }
     >
+      {!automation && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 space-y-2">
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-primary" htmlFor="automation-describe">
+            <Sparkles className="h-3.5 w-3.5" />
+            Describe it
+          </label>
+          <div className="flex gap-2">
+            <textarea
+              id="automation-describe"
+              value={describe}
+              onChange={(e) => setDescribe(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && describe.trim().length >= 3) draftMutation.mutate();
+              }}
+              rows={2}
+              maxLength={1000}
+              placeholder="e.g. Every Monday at 9am, send assignees their open P0 and P1 bugs. Or: when a new issue looks security-related, tell the reporter."
+              className={cn(inputClass, 'resize-none')}
+            />
+            <button
+              type="button"
+              onClick={() => draftMutation.mutate()}
+              disabled={describe.trim().length < 3 || draftMutation.isPending}
+              className="self-stretch shrink-0 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {draftMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              Draft
+            </button>
+          </div>
+          {drafted && (
+            <div className="space-y-1 animate-fade-in">
+              <p className="text-[11px] text-muted-foreground">
+                Drafted by <span className="font-mono">{drafted.modelUsed}</span>. Review below, then create.
+              </p>
+              {drafted.warnings.map((w) => (
+                <p key={w} className="flex items-start gap-1.5 text-[11px] text-amber-400">
+                  <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                  {w}
+                </p>
+              ))}
+            </div>
+          )}
+          <ErrorNote error={draftMutation.error} />
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <label className={labelClass} htmlFor="automation-name">Name</label>
@@ -321,6 +405,11 @@ export function AutomationFormDialog({
             ))}
           </div>
         )}
+        {aiOnSchedule && (
+          <p className="text-[11px] text-amber-400 mt-2">
+            AI conditions only work with “An issue is created”. Remove it or change the trigger.
+          </p>
+        )}
         {unusedFields.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 mt-3">
             <span className="text-[11px] text-muted-foreground mr-1">Add condition:</span>
@@ -331,7 +420,11 @@ export function AutomationFormDialog({
                 onClick={() =>
                   setConditions((prev) => [
                     ...prev,
-                    { field: f.field, operator: f.field === 'assignee' ? 'UNASSIGNED' : 'IN', values: [] },
+                    {
+                      field: f.field,
+                      operator: f.field === 'assignee' ? 'UNASSIGNED' : f.field === 'ai' ? 'ANY_OF' : 'IN',
+                      values: [],
+                    },
                   ])
                 }
                 className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary transition-colors"
@@ -398,8 +491,11 @@ function ConditionRow({
   onRemove: () => void;
 }) {
   const isAssignee = condition.field === 'assignee';
-  const options =
-    condition.field === 'type'
+  const isAi = condition.field === 'ai';
+  const options: { value: string; label: string; hint?: string }[] =
+    condition.field === 'ai'
+      ? AI_CATEGORY_OPTIONS
+      : condition.field === 'type'
       ? TYPE_OPTIONS
       : condition.field === 'priority'
         ? PRIORITY_OPTIONS
@@ -411,25 +507,32 @@ function ConditionRow({
   return (
     <div className="rounded-lg border border-border bg-background/60 p-2.5 space-y-2">
       <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold w-16">{FIELD_ORDER.find((f) => f.field === condition.field)?.label}</span>
-        <select
-          aria-label="Operator"
-          value={condition.operator}
-          onChange={(e) => onChange({ operator: e.target.value as DraftOperator })}
-          className="text-xs bg-background border border-border rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary"
-        >
-          {isAssignee ? (
-            <>
-              <option value="UNASSIGNED">is unassigned</option>
-              <option value="IN">is one of</option>
-            </>
-          ) : (
-            <>
-              <option value="IN">is</option>
-              <option value="NOT_IN">is not</option>
-            </>
-          )}
-        </select>
+        <span className={cn('text-xs font-semibold', isAi ? 'inline-flex items-center gap-1 text-primary' : 'w-16')}>
+          {isAi && <Sparkles className="h-3 w-3" />}
+          {FIELD_ORDER.find((f) => f.field === condition.field)?.label}
+        </span>
+        {isAi ? (
+          <span className="text-xs text-muted-foreground">any of</span>
+        ) : (
+          <select
+            aria-label="Operator"
+            value={condition.operator}
+            onChange={(e) => onChange({ operator: e.target.value as DraftOperator })}
+            className="text-xs bg-background border border-border rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            {isAssignee ? (
+              <>
+                <option value="UNASSIGNED">is unassigned</option>
+                <option value="IN">is one of</option>
+              </>
+            ) : (
+              <>
+                <option value="IN">is</option>
+                <option value="NOT_IN">is not</option>
+              </>
+            )}
+          </select>
+        )}
         <button
           type="button"
           onClick={onRemove}
@@ -444,6 +547,7 @@ function ConditionRow({
           {options.map((o) => (
             <TogglePill
               key={o.value}
+              title={o.hint}
               active={condition.values.includes(o.value)}
               onClick={() =>
                 onChange({
@@ -458,6 +562,11 @@ function ConditionRow({
           ))}
           {condition.values.length === 0 && <span className="text-[11px] text-amber-400 self-center">Pick at least one.</span>}
         </div>
+      )}
+      {isAi && (
+        <p className="text-[11px] text-muted-foreground">
+          Each new issue is classified once from its title and description: by the configured LLM, or by keyword rules when none is available.
+        </p>
       )}
     </div>
   );
@@ -517,11 +626,22 @@ function ChoiceCard({
   );
 }
 
-function TogglePill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function TogglePill({
+  active,
+  onClick,
+  title,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  title?: string;
+  children: React.ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
+      title={title}
       aria-pressed={active}
       className={cn(
         'px-2.5 py-1 rounded-full border text-[11px] font-medium transition-colors',
