@@ -15,8 +15,11 @@ export interface ScheduledJobData {
   automationId: string;
 }
 
-/** BullMQ job scheduler id for a scheduled automation; one scheduler per automation. */
-export const SCHEDULER_PREFIX = 'automation:';
+/**
+ * BullMQ job scheduler id for a scheduled automation; one scheduler per automation.
+ * No ":" — BullMQ derives job ids as `repeat:<schedulerId>:<millis>` and rejects extra separators.
+ */
+export const SCHEDULER_PREFIX = 'automation-';
 export const schedulerId = (automationId: string) => `${SCHEDULER_PREFIX}${automationId}`;
 
 /** Upper bound on issues a scheduled run evaluates, so one rule cannot flood the notification queue. */
